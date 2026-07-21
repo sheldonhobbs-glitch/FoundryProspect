@@ -5,13 +5,23 @@ from fastapi.staticfiles import StaticFiles
 from api.auth import create_session_token, verify_login_token
 from api.config import get_settings
 from api.routes import auth as auth_routes
+from api.routes import bills as bills_routes
 from api.routes import health as health_routes
+from api.routes import maintenance as maintenance_routes
+from api.routes import notifications as notifications_routes
+from api.routes import subscriptions as subscriptions_routes
+from api.routes import warranties as warranties_routes
 
 app = FastAPI(title="Ember")
 settings = get_settings()
 
 app.include_router(health_routes.router, prefix="/api")
 app.include_router(auth_routes.router, prefix="/api")
+app.include_router(bills_routes.router, prefix="/api")
+app.include_router(subscriptions_routes.router, prefix="/api")
+app.include_router(maintenance_routes.router, prefix="/api")
+app.include_router(warranties_routes.router, prefix="/api")
+app.include_router(notifications_routes.router, prefix="/api")
 
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 

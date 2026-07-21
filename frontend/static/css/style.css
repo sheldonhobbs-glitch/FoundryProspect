@@ -120,6 +120,156 @@ body {
   border-color: #f6cdb8;
 }
 
+.resource-bubble,
+.notification-bubble {
+  max-width: 100%;
+  width: 100%;
+}
+
+.notification-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notification-bubble button {
+  flex-shrink: 0;
+  border: none;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* --- Quick actions --- */
+#quick-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  overflow-x: auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+#quick-actions button {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+#quick-actions button:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* --- Resource lists / cards / forms --- */
+.resource-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.resource-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.card-actions button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.card-actions button:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.add-btn {
+  width: 100%;
+  border: 1px dashed var(--border);
+  background: none;
+  border-radius: 10px;
+  padding: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.resource-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.resource-form label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.resource-form input,
+.resource-form select,
+.resource-form textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.resource-form button {
+  margin-top: 8px;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.resource-form .danger-btn {
+  background: var(--error);
+}
+
 .chat-input-bar {
   padding: 12px;
   border-top: 1px solid var(--border);

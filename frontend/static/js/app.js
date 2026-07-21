@@ -26,6 +26,7 @@ function showChat() {
       );
     })
     .catch(() => addBubble("Could not reach the API."));
+  if (window.loadNotifications) loadNotifications();
 }
 
 function showLogin() {
