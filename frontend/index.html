@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ember</title>
+  <meta name="theme-color" content="#e8734a" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Login screen -->
+    <section id="login-screen" class="screen">
+      <div class="login-card">
+        <h1>🔥 Ember</h1>
+        <p class="subtitle">Your household, sorted.</p>
+        <form id="login-form">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" autocomplete="username" required />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button type="submit">Log in</button>
+          <p id="login-error" class="error" hidden></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- Chat-style main screen -->
+    <section id="chat-screen" class="screen" hidden>
+      <header class="chat-header">
+        <span class="brand">🔥 Ember</span>
+        <button id="logout-btn" class="link-btn">Log out</button>
+      </header>
+
+      <main id="chat-log" class="chat-log"></main>
+
+      <footer class="chat-input-bar">
+        <input id="chat-input" type="text" placeholder="Ember is listening... (chat features arrive in later phases)" disabled />
+      </footer>
+    </section>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
