@@ -1,7 +1,5 @@
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
-const loginForm = document.getElementById("login-form");
-const loginError = document.getElementById("login-error");
 const logoutBtn = document.getElementById("logout-btn");
 const chatLog = document.getElementById("chat-log");
 
@@ -44,27 +42,6 @@ async function checkSession() {
     showLogin();
   }
 }
-
-loginForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  loginError.hidden = true;
-  const username = document.getElementById("username").value;
-  const password = document.getElementById("password").value;
-
-  const res = await fetch("/api/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-
-  if (res.ok) {
-    loginForm.reset();
-    showChat();
-  } else {
-    loginError.textContent = "Invalid username or password.";
-    loginError.hidden = false;
-  }
-});
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/auth/logout", { method: "POST" });

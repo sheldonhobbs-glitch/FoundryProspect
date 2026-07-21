@@ -10,19 +10,17 @@
 </head>
 <body>
   <div id="app">
-    <!-- Login screen -->
+    <!-- Logged-out screen: there's no login form. Ember's login IS a
+         bookmarked link (/login/<token>) — visiting it sets the session
+         and lands here already authenticated. -->
     <section id="login-screen" class="screen">
       <div class="login-card">
         <h1>🔥 Ember</h1>
         <p class="subtitle">Your household, sorted.</p>
-        <form id="login-form">
-          <label for="username">Username</label>
-          <input id="username" name="username" type="text" autocomplete="username" required />
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required />
-          <button type="submit">Log in</button>
-          <p id="login-error" class="error" hidden></p>
-        </form>
+        <p class="login-instructions">
+          Not logged in. Open your bookmarked Ember link to get in —
+          there's no username or password to type.
+        </p>
       </div>
     </section>
 

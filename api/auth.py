@@ -1,4 +1,5 @@
-import bcrypt
+import secrets
+
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from api.config import get_settings
@@ -12,17 +13,10 @@ def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(settings.secret_key, salt="ember-session")
 
 
-def verify_credentials(username: str, password: str) -> bool:
-    if username != settings.household_username:
+def verify_login_token(token: str) -> bool:
+    if not token or not settings.household_login_token:
         return False
-    if not settings.household_password_hash:
-        return False
-    try:
-        return bcrypt.checkpw(
-            password.encode("utf-8"), settings.household_password_hash.encode("utf-8")
-        )
-    except ValueError:
-        return False
+    return secrets.compare_digest(token, settings.household_login_token)
 
 
 def create_session_token() -> str:

@@ -9,14 +9,12 @@ one household, no roles.
 
    ```
    cp .env.example .env
-   python -c "import secrets; print(secrets.token_hex(32))"   # -> SECRET_KEY
-   pip install passlib[bcrypt]  # if not already installed locally
-   python scripts/hash_password.py "your-chosen-password"     # -> HOUSEHOLD_PASSWORD_HASH
+   python -c "import secrets; print(secrets.token_hex(32))"     # -> SECRET_KEY
+   python -c "import secrets; print(secrets.token_urlsafe(32))" # -> HOUSEHOLD_LOGIN_TOKEN
    ```
 
-   Set `HOUSEHOLD_USERNAME` and `HOUSEHOLD_PASSWORD_HASH` in `.env` from the
-   output above. Leave the Phase 2+ keys (Google, Anthropic, VAPID) blank for
-   now.
+   Set `SECRET_KEY` and `HOUSEHOLD_LOGIN_TOKEN` in `.env` from the output
+   above. Leave the Phase 2+ keys (Google, Anthropic, VAPID) blank for now.
 
 2. Start everything:
 
@@ -34,8 +32,9 @@ one household, no roles.
    curl http://localhost:8000/api/health
    ```
 
-   Then open `http://localhost:8000` in a browser and log in with the
-   username/password you set in `.env`.
+   Then log in by opening `http://localhost:8000/login/<HOUSEHOLD_LOGIN_TOKEN>`
+   in a browser — there's no username or password. Bookmark that URL (or add
+   it to your home screen) on both of your phones; that bookmark is the login.
 
 ## Structure
 
