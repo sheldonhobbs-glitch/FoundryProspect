@@ -97,11 +97,22 @@ const RESOURCES = {
       { name: "property_or_appliance", label: "Property / appliance", type: "text", required: true },
       { name: "last_done", label: "Last done (optional)", type: "date" },
       { name: "next_due", label: "Next due (optional)", type: "date" },
+      {
+        name: "recurrence_value", label: "Repeats every (optional — leave blank for one-off)",
+        type: "number", min: "1",
+      },
+      {
+        name: "recurrence_unit", label: "Repeat unit", type: "select",
+        options: ["", "days", "weeks", "months", "years"], default: "",
+      },
       { name: "notes", label: "Notes", type: "textarea" },
     ],
     renderCard(item) {
+      const repeats = item.recurrence_value && item.recurrence_unit
+        ? ` · repeats every ${item.recurrence_value} ${item.recurrence_unit}`
+        : "";
       return `<strong>${escapeHtml(item.task)}</strong> (${escapeHtml(item.property_or_appliance)})<br>
-        last done ${item.last_done ?? "never"} · next due ${item.next_due ?? "—"}`;
+        last done ${item.last_done ?? "never"} · next due ${item.next_due ?? "—"}${repeats}`;
     },
     actions(item, refresh) {
       return [
@@ -159,7 +170,7 @@ function buildForm(resourceKey, existing, onDone) {
       for (const opt of field.options) {
         const o = document.createElement("option");
         o.value = opt;
-        o.textContent = opt.replace("_", " ");
+        o.textContent = opt === "" ? "— none, one-off —" : opt.replace("_", " ");
         input.appendChild(o);
       }
     } else if (field.type === "textarea") {
@@ -172,6 +183,7 @@ function buildForm(resourceKey, existing, onDone) {
       input = document.createElement("input");
       input.type = field.type;
       if (field.step) input.step = field.step;
+      if (field.min) input.min = field.min;
     }
     input.name = field.name;
     if (field.required) input.required = true;

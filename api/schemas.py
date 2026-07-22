@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from db.models import BillingCycle, Recurrence
+from db.models import BillingCycle, Recurrence, RecurrenceUnit
 
 
 class BillBase(BaseModel):
@@ -77,6 +77,8 @@ class MaintenanceItemBase(BaseModel):
     property_or_appliance: str
     last_done: date | None = None
     next_due: date | None = None
+    recurrence_value: int | None = None
+    recurrence_unit: RecurrenceUnit | None = None
     notes: str | None = None
 
 
@@ -89,6 +91,8 @@ class MaintenanceItemUpdate(BaseModel):
     property_or_appliance: str | None = None
     last_done: date | None = None
     next_due: date | None = None
+    recurrence_value: int | None = None
+    recurrence_unit: RecurrenceUnit | None = None
     notes: str | None = None
 
 
