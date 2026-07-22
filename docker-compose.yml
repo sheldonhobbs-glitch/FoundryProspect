@@ -15,16 +15,6 @@ services:
       timeout: 5s
       retries: 10
 
-  migrate:
-    build: .
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql://ember:ember@db:5432/ember
-    depends_on:
-      db:
-        condition: service_healthy
-    command: alembic upgrade head
-
   api:
     build: .
     env_file: .env
@@ -35,8 +25,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
@@ -47,8 +35,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     command: python -m worker.main
 
 volumes:

@@ -1,3 +1,8 @@
+import logging
+from contextlib import asynccontextmanager
+
+from alembic import command
+from alembic.config import Config as AlembicConfig
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,7 +19,24 @@ from api.routes import notifications as notifications_routes
 from api.routes import subscriptions as subscriptions_routes
 from api.routes import warranties as warranties_routes
 
-app = FastAPI(title="Ember")
+logger = logging.getLogger("ember.startup")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Run migrations in-process at startup rather than as a separate shell
+    # step before uvicorn — keeps it in one process/log stream and one
+    # thing that can fail, instead of a fragile two-command chain.
+    try:
+        logger.info("running database migrations...")
+        command.upgrade(AlembicConfig("alembic.ini"), "head")
+        logger.info("migrations complete")
+    except Exception:
+        logger.exception("database migrations failed on startup")
+    yield
+
+
+app = FastAPI(title="Ember", lifespan=lifespan)
 settings = get_settings()
 
 app.include_router(health_routes.router, prefix="/api")
