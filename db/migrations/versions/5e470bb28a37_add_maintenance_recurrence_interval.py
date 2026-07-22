@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ENUM
 
 
 revision: str = '5e470bb28a37'
@@ -16,8 +17,8 @@ down_revision: Union[str, None] = '6bf8c5b7ecf3'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-recurrence_unit_enum = sa.Enum(
-    'days', 'weeks', 'months', 'years', name='maintenance_recurrence_unit'
+recurrence_unit_enum = ENUM(
+    'days', 'weeks', 'months', 'years', name='maintenance_recurrence_unit', create_type=False
 )
 
 

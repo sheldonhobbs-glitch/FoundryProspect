@@ -139,6 +139,40 @@ const RESOURCES = {
       return [];
     },
   },
+  decisions: {
+    label: "Decisions",
+    endpoint: "/api/decisions",
+    fields: [
+      { name: "item", label: "Thing to decide", type: "text", required: true },
+      { name: "notes", label: "Notes", type: "textarea" },
+    ],
+    renderCard(item) {
+      if (item.status === "decided") {
+        return `<strong>${escapeHtml(item.item)}</strong> · ✅ decided ${item.decided_at}<br>
+          ${escapeHtml(item.decision)}`;
+      }
+      const notes = item.notes ? `<br><span class="muted">${escapeHtml(item.notes)}</span>` : "";
+      return `<strong>${escapeHtml(item.item)}</strong> · open${notes}`;
+    },
+    actions(item, refresh) {
+      if (item.status === "decided") {
+        return [
+          { label: "Reopen", onClick: () => api(`/api/decisions/${item.id}/reopen`, "POST").then(refresh) },
+        ];
+      }
+      return [
+        {
+          label: "Resolve",
+          onClick: async () => {
+            const decision = prompt(`What was decided about "${item.item}"?`);
+            if (!decision || !decision.trim()) return;
+            await api(`/api/decisions/${item.id}/resolve`, "POST", { decision });
+            refresh();
+          },
+        },
+      ];
+    },
+  },
 };
 
 async function api(path, method = "GET", body) {
@@ -312,6 +346,237 @@ async function openResource(resourceKey) {
   await refresh();
 }
 
+function localInputToIso(value) {
+  return new Date(value).toISOString();
+}
+
+function isoToLocalInput(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderEventCard(event) {
+  const start = new Date(event.start_time);
+  const end = new Date(event.end_time);
+  const fmt = event.all_day
+    ? start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+    : `${start.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` +
+      ` – ${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  const loc = event.location ? ` · ${escapeHtml(event.location)}` : "";
+  return `<strong>${escapeHtml(event.title)}</strong><br>${fmt}${loc}`;
+}
+
+function buildEventForm(existing, onDone) {
+  const form = document.createElement("form");
+  form.className = "resource-form";
+
+  const fields = [
+    { name: "title", label: "Title", type: "text", required: true },
+    { name: "start_time", label: "Start", type: "datetime-local", required: true },
+    { name: "end_time", label: "End", type: "datetime-local", required: true },
+    { name: "all_day", label: "All day", type: "checkbox" },
+    { name: "location", label: "Location (optional)", type: "text" },
+    { name: "description", label: "Description (optional)", type: "textarea" },
+  ];
+
+  for (const field of fields) {
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    form.appendChild(label);
+
+    const input = document.createElement(field.type === "textarea" ? "textarea" : "input");
+    if (field.type !== "textarea") input.type = field.type;
+    input.name = field.name;
+    if (field.required) input.required = true;
+
+    if (field.type === "checkbox") {
+      input.checked = existing ? existing.all_day : false;
+    } else if (field.type === "datetime-local") {
+      input.value = existing ? isoToLocalInput(existing[field.name]) : "";
+    } else {
+      input.value = existing ? existing[field.name] ?? "" : "";
+    }
+    form.appendChild(input);
+  }
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.textContent = existing ? "Save changes" : "Add";
+  form.appendChild(submitBtn);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+    const payload = {
+      title: formData.get("title"),
+      start_time: localInputToIso(formData.get("start_time")),
+      end_time: localInputToIso(formData.get("end_time")),
+      all_day: formData.get("all_day") === "on",
+      location: formData.get("location") || null,
+      description: formData.get("description") || null,
+    };
+    try {
+      if (existing) {
+        await api(`/api/calendar/events/${existing.id}`, "PATCH", payload);
+      } else {
+        await api("/api/calendar/events", "POST", payload);
+      }
+      onDone();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  return form;
+}
+
+async function openCalendar() {
+  const bubble = document.createElement("div");
+  bubble.className = "bubble system resource-bubble";
+
+  const title = document.createElement("div");
+  title.className = "resource-title";
+  title.textContent = "Calendar";
+  bubble.appendChild(title);
+
+  const body = document.createElement("div");
+  bubble.appendChild(body);
+
+  chatLog.appendChild(bubble);
+  chatLog.scrollTop = chatLog.scrollHeight;
+
+  const status = await api("/api/calendar/status").catch(() => null);
+  if (!status) {
+    body.innerHTML = '<p class="muted">Could not reach the calendar API.</p>';
+    return;
+  }
+  if (!status.configured) {
+    body.innerHTML =
+      '<p class="muted">Google Calendar isn\'t set up yet — add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env first.</p>';
+    return;
+  }
+  if (!status.connected) {
+    const connectLink = document.createElement("a");
+    connectLink.href = "/api/calendar/connect";
+    connectLink.className = "add-btn";
+    connectLink.style.display = "block";
+    connectLink.style.textAlign = "center";
+    connectLink.textContent = "Connect Google Calendar";
+    body.appendChild(connectLink);
+    return;
+  }
+
+  const infoRow = document.createElement("div");
+  infoRow.className = "muted";
+  infoRow.textContent = status.google_account_email
+    ? `Connected as ${status.google_account_email}`
+    : "Connected";
+  body.appendChild(infoRow);
+
+  const toolbarRow = document.createElement("div");
+  toolbarRow.className = "card-actions";
+  const syncBtn = document.createElement("button");
+  syncBtn.type = "button";
+  syncBtn.textContent = "Sync now";
+  const disconnectBtn = document.createElement("button");
+  disconnectBtn.type = "button";
+  disconnectBtn.textContent = "Disconnect";
+  toolbarRow.appendChild(syncBtn);
+  toolbarRow.appendChild(disconnectBtn);
+  body.appendChild(toolbarRow);
+
+  const listEl = document.createElement("div");
+  body.appendChild(listEl);
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "add-btn";
+  addBtn.textContent = "+ Add event";
+  body.appendChild(addBtn);
+
+  async function refresh() {
+    const events = await api("/api/calendar/events");
+    listEl.innerHTML = "";
+    if (events.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No events in the next ~3 months.";
+      listEl.appendChild(empty);
+    }
+    for (const event of events) {
+      const card = document.createElement("div");
+      card.className = "resource-card";
+      card.innerHTML = renderEventCard(event);
+
+      const btnRow = document.createElement("div");
+      btnRow.className = "card-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        const existingForm = card.querySelector("form");
+        if (existingForm) {
+          existingForm.remove();
+          return;
+        }
+        card.appendChild(buildEventForm(event, refresh));
+      });
+      btnRow.appendChild(editBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm(`Delete "${event.title}"?`)) return;
+        await api(`/api/calendar/events/${event.id}`, "DELETE");
+        refresh();
+      });
+      btnRow.appendChild(deleteBtn);
+
+      card.appendChild(btnRow);
+      listEl.appendChild(card);
+    }
+  }
+
+  syncBtn.addEventListener("click", async () => {
+    syncBtn.disabled = true;
+    syncBtn.textContent = "Syncing…";
+    try {
+      await api("/api/calendar/sync", "POST");
+      await refresh();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      syncBtn.disabled = false;
+      syncBtn.textContent = "Sync now";
+    }
+  });
+
+  disconnectBtn.addEventListener("click", async () => {
+    if (!confirm("Disconnect Google Calendar?")) return;
+    await api("/api/calendar/disconnect", "POST");
+    bubble.remove();
+    openCalendar();
+  });
+
+  addBtn.addEventListener("click", () => {
+    const existingForm = body.querySelector(".resource-form");
+    if (existingForm) {
+      existingForm.remove();
+      return;
+    }
+    const form = buildEventForm(null, () => {
+      form.remove();
+      refresh();
+    });
+    body.insertBefore(form, addBtn);
+  });
+
+  await refresh();
+}
+
 async function loadNotifications() {
   const notifications = await api("/api/notifications").catch(() => []);
   for (const n of notifications) {
@@ -331,5 +596,11 @@ async function loadNotifications() {
 }
 
 document.querySelectorAll("#quick-actions button").forEach((btn) => {
-  btn.addEventListener("click", () => openResource(btn.dataset.resource));
+  btn.addEventListener("click", () => {
+    if (btn.dataset.resource === "calendar") {
+      openCalendar();
+    } else {
+      openResource(btn.dataset.resource);
+    }
+  });
 });

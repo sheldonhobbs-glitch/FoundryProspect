@@ -1,10 +1,14 @@
 """Ember background worker.
 
 Runs as a separate long-lived process (not inside the API request/response
-cycle). Once a day, scans bills, subscriptions, maintenance items, and
-warranties for anything due within REMINDER_DAYS_AHEAD and queues a
-PendingNotification row for each. Actual delivery (Web Push via VAPID) is
-wired up in Phase 6 — for now these show up in-app via GET /api/notifications.
+cycle), on two cadences:
+
+- Every CALENDAR_SYNC_INTERVAL_SECONDS, pulls Google Calendar into the local
+  event cache, so events added directly in Google (not via Ember) show up.
+- Once a day, scans bills, subscriptions, maintenance items, and warranties
+  for anything due within REMINDER_DAYS_AHEAD and queues a PendingNotification
+  row for each. Actual delivery (Web Push via VAPID) is wired up in Phase 6 —
+  for now these show up in-app via GET /api/notifications.
 """
 
 import logging
@@ -14,6 +18,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api import google_calendar as gcal
 from api.config import get_settings
 from db.models import Bill, MaintenanceItem, PendingNotification, Subscription, Warranty
 from db.session import SessionLocal
@@ -21,7 +26,7 @@ from db.session import SessionLocal
 logging.basicConfig(level=logging.INFO, format="%(asctime)s worker %(levelname)s %(message)s")
 logger = logging.getLogger("ember.worker")
 
-CHECK_INTERVAL_SECONDS = 24 * 60 * 60  # daily
+CALENDAR_SYNC_INTERVAL_SECONDS = 15 * 60
 
 
 def _queue_if_new(db: Session, resource_type: str, resource_id: int, message: str) -> None:
@@ -94,11 +99,36 @@ def run_due_checks() -> None:
         db.close()
 
 
+def sync_calendar() -> None:
+    db = SessionLocal()
+    try:
+        count = gcal.sync_events(db)
+        if count:
+            logger.info("calendar sync: %d event(s) refreshed", count)
+    except gcal.CalendarError:
+        logger.exception("calendar sync failed")
+    except Exception:
+        db.rollback()
+        logger.exception("calendar sync failed unexpectedly")
+    finally:
+        db.close()
+
+
 def main() -> None:
-    logger.info("Ember worker starting, checking every %ss", CHECK_INTERVAL_SECONDS)
+    logger.info(
+        "Ember worker starting: calendar sync every %ss, due-date scan once daily",
+        CALENDAR_SYNC_INTERVAL_SECONDS,
+    )
+    last_due_check: date | None = None
     while True:
-        run_due_checks()
-        time.sleep(CHECK_INTERVAL_SECONDS)
+        sync_calendar()
+
+        today = date.today()
+        if today != last_due_check:
+            run_due_checks()
+            last_due_check = today
+
+        time.sleep(CALENDAR_SYNC_INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":

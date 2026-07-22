@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +24,10 @@ class Settings(BaseSettings):
 
     google_client_id: str = ""
     google_client_secret: str = ""
-    google_calendar_id: str = ""
+    google_calendar_id: str = "primary"
+    # Must exactly match a redirect URI registered on the OAuth client in
+    # Google Cloud Console, e.g. https://<railway-domain>/api/calendar/oauth/callback
+    google_redirect_uri: str = "http://localhost:8000/api/calendar/oauth/callback"
 
     anthropic_api_key: str = ""
 
@@ -33,9 +37,20 @@ class Settings(BaseSettings):
 
     port: int = 8000
 
+    @field_validator("google_calendar_id")
+    @classmethod
+    def _default_calendar_id(cls, v: str) -> str:
+        # An explicit-but-blank GOOGLE_CALENDAR_ID in .env would otherwise
+        # override the "primary" default, breaking every Calendar API call.
+        return v or "primary"
+
     @property
     def is_production(self) -> bool:
         return self.env.lower() == "production"
+
+    @property
+    def google_calendar_configured(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
 
 @lru_cache
