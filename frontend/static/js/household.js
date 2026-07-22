@@ -8,6 +8,24 @@ function fmtMoney(value) {
   return `$${Number(value).toFixed(2)}`;
 }
 
+// Suggested categories, shared by bills and subscriptions. This is a
+// <datalist> (see below), not a fixed enum — typing anything else is
+// still fine, these are just the common ones offered as autocomplete.
+const CATEGORY_OPTIONS = [
+  "bills", "subscriptions", "groceries", "insurance", "rego", "streaming",
+  "gym", "eating out", "utilities", "rent/mortgage", "phone/internet",
+  "transport/fuel", "healthcare", "home maintenance", "entertainment", "other",
+];
+
+const categoryDatalist = document.createElement("datalist");
+categoryDatalist.id = "category-options";
+for (const category of CATEGORY_OPTIONS) {
+  const option = document.createElement("option");
+  option.value = category;
+  categoryDatalist.appendChild(option);
+}
+document.body.appendChild(categoryDatalist);
+
 const RESOURCES = {
   bills: {
     label: "Bills",
@@ -20,7 +38,7 @@ const RESOURCES = {
         name: "recurrence", label: "Recurrence", type: "select",
         options: ["one_time", "weekly", "monthly", "quarterly", "yearly"], default: "one_time",
       },
-      { name: "category", label: "Category", type: "text", required: true },
+      { name: "category", label: "Category", type: "combo", required: true },
       { name: "notes", label: "Notes", type: "textarea" },
     ],
     renderCard(item) {
@@ -51,7 +69,7 @@ const RESOURCES = {
       },
       { name: "renewal_date", label: "Renewal date", type: "date", required: true },
       { name: "cancel_by_date", label: "Cancel-by date (optional)", type: "date" },
-      { name: "category", label: "Category", type: "text", required: true },
+      { name: "category", label: "Category", type: "combo", required: true },
       { name: "notes", label: "Notes", type: "textarea" },
     ],
     renderCard(item) {
@@ -146,6 +164,10 @@ function buildForm(resourceKey, existing, onDone) {
       }
     } else if (field.type === "textarea") {
       input = document.createElement("textarea");
+    } else if (field.type === "combo") {
+      input = document.createElement("input");
+      input.type = "text";
+      input.setAttribute("list", "category-options");
     } else {
       input = document.createElement("input");
       input.type = field.type;
