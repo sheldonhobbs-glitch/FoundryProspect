@@ -1,4 +1,5 @@
 const loginScreen = document.getElementById("login-screen");
+const identityScreen = document.getElementById("identity-screen");
 const mainScreen = document.getElementById("main-screen");
 const logoutBtn = document.getElementById("logout-btn");
 const statusBubble = document.getElementById("status-bubble");
@@ -10,6 +11,7 @@ function setStatus(text) {
 
 function showMain() {
   loginScreen.hidden = true;
+  identityScreen.hidden = true;
   mainScreen.hidden = false;
   statusBubble.hidden = true;
 
@@ -20,10 +22,18 @@ function showMain() {
     })
     .catch(() => setStatus("Could not reach the API."));
 
+  if (window.applyIdentity) applyIdentity(window.currentIdentity);
   if (window.showHome) showHome();
 }
 
+function showIdentityPicker() {
+  loginScreen.hidden = true;
+  mainScreen.hidden = true;
+  identityScreen.hidden = false;
+}
+
 function showLogin() {
+  identityScreen.hidden = true;
   mainScreen.hidden = true;
   loginScreen.hidden = false;
 }
@@ -31,15 +41,23 @@ function showLogin() {
 async function checkSession() {
   const res = await fetch("/api/auth/me");
   const data = await res.json();
-  if (data.authenticated) {
-    showMain();
-  } else {
+  if (!data.authenticated) {
     showLogin();
+    return;
+  }
+  const identityRes = await fetch("/api/auth/identity");
+  const identityData = await identityRes.json();
+  window.currentIdentity = identityData.identity;
+  if (!identityData.identity) {
+    showIdentityPicker();
+  } else {
+    showMain();
   }
 }
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/auth/logout", { method: "POST" });
+  window.currentIdentity = null;
   showLogin();
 });
 

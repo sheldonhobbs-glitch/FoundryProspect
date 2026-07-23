@@ -12,6 +12,10 @@ def _assume_utc_if_naive(v: datetime | None) -> datetime | None:
     return v
 
 
+class IdentitySet(BaseModel):
+    name: str
+
+
 class BillBase(BaseModel):
     name: str
     amount: Decimal

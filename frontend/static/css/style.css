@@ -15,6 +15,10 @@
   --border: #DEDBD3;
   --error: #C1584B;
   --done: #B7BDB6;
+  --sheldon: #3D6E8C;
+  --sheldon-soft: #DCE8EF;
+  --partner: #8A5FA3;
+  --partner-soft: #EBE1F1;
 }
 
 * {
@@ -79,6 +83,64 @@ body {
   color: var(--text);
   font-size: 15px;
   line-height: 1.5;
+}
+
+.identity-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.identity-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.identity-option:hover {
+  border-color: var(--accent);
+}
+
+.identity-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+  background: var(--muted);
+}
+.identity-avatar.sheldon { background: var(--sheldon); }
+.identity-avatar.partner { background: var(--partner); }
+
+.identity-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0;
+}
+.identity-pill .identity-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
 }
 
 .error {
@@ -413,6 +475,77 @@ body {
 
 .day-header:first-child {
   margin-top: 0;
+}
+
+/* --- Household: summary strip + tabs + FAB --- */
+.summary-strip {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.strip-tag {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+}
+.strip-tag .st-val {
+  font-size: 16px;
+  font-weight: 700;
+}
+.strip-tag .st-label {
+  font-size: 9.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+.strip-tag.warn .st-val {
+  color: var(--coral);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 9px 4px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+}
+.tab.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.fab {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 8px 20px rgba(34, 48, 60, 0.35);
+  z-index: 5;
 }
 
 /* --- Resource lists / cards / forms --- */

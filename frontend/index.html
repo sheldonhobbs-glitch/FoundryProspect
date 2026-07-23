@@ -27,6 +27,27 @@
       </div>
     </section>
 
+    <!-- Identity screen: not a login, just "who's using the app right now"
+         so Decisions/Calendar can attribute things to a person. Shown once
+         per session after the real (shared) login above. -->
+    <section id="identity-screen" class="screen" hidden>
+      <div class="login-card">
+        <h1>🔥 Ember</h1>
+        <p class="subtitle">Who's this?</p>
+        <div class="identity-options">
+          <button type="button" class="identity-option" data-name="sheldon">
+            <span class="identity-avatar sheldon">S</span>
+            <span>Sheldon</span>
+          </button>
+          <button type="button" class="identity-option" data-name="partner">
+            <span class="identity-avatar partner">P</span>
+            <span>Partner</span>
+          </button>
+        </div>
+        <p class="login-instructions">Just for attributing votes and calendar entries — not a separate login.</p>
+      </div>
+    </section>
+
     <!-- Main screen: home is a curated "what needs you today" digest.
          Browse is the full section-tile grid for looking at everything in
          a category, not just what's due. Detail is one section at a time,
@@ -35,6 +56,10 @@
       <header class="app-header">
         <button type="button" id="brand-btn" class="brand-btn">🔥 Ember</button>
         <div class="header-actions">
+          <button type="button" id="identity-btn" class="identity-pill">
+            <span class="identity-avatar" id="identity-avatar"></span>
+            <span id="identity-label"></span>
+          </button>
           <button type="button" id="browse-btn" class="link-btn">Browse</button>
           <button type="button" id="logout-btn" class="link-btn">Log out</button>
         </div>
@@ -56,21 +81,9 @@
         <div id="browse-view" hidden>
           <h2 class="browse-title">Browse</h2>
           <div id="section-grid">
-            <button type="button" class="section-tile" data-resource="bills">
-              <span class="tile-label">Bills</span>
-              <span class="tile-count" data-count-for="bills"></span>
-            </button>
-            <button type="button" class="section-tile" data-resource="subscriptions">
-              <span class="tile-label">Subscriptions</span>
-              <span class="tile-count" data-count-for="subscriptions"></span>
-            </button>
-            <button type="button" class="section-tile" data-resource="maintenance">
-              <span class="tile-label">Maintenance</span>
-              <span class="tile-count" data-count-for="maintenance"></span>
-            </button>
-            <button type="button" class="section-tile" data-resource="warranties">
-              <span class="tile-label">Warranties</span>
-              <span class="tile-count" data-count-for="warranties"></span>
+            <button type="button" class="section-tile" data-resource="household">
+              <span class="tile-label">Household</span>
+              <span class="tile-count" data-count-for="household"></span>
             </button>
             <button type="button" class="section-tile" data-resource="calendar">
               <span class="tile-label">Calendar</span>
@@ -79,6 +92,14 @@
             <button type="button" class="section-tile" data-resource="decisions">
               <span class="tile-label">Decisions</span>
               <span class="tile-count" data-count-for="decisions"></span>
+            </button>
+            <button type="button" class="section-tile" data-resource="financial">
+              <span class="tile-label">Financial</span>
+              <span class="tile-count" data-count-for="financial"></span>
+            </button>
+            <button type="button" class="section-tile" data-resource="meals">
+              <span class="tile-label">Meal planning</span>
+              <span class="tile-count" data-count-for="meals"></span>
             </button>
           </div>
         </div>

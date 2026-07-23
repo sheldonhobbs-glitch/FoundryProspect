@@ -206,6 +206,37 @@ async function api(path, method = "GET", body) {
   return res.status === 204 ? null : res.json();
 }
 
+// --- Identity: "who's using the app right now" (Sheldon/Partner), stored
+// in a cookie separate from the real session — pure attribution, not auth.
+const IDENTITY_NAMES = { sheldon: "Sheldon", partner: "Partner" };
+
+function applyIdentity(name) {
+  window.currentIdentity = name;
+  const avatar = document.getElementById("identity-avatar");
+  const label = document.getElementById("identity-label");
+  if (!name) return;
+  avatar.textContent = name === "sheldon" ? "S" : "P";
+  avatar.className = `identity-avatar ${name}`;
+  label.textContent = IDENTITY_NAMES[name];
+}
+window.applyIdentity = applyIdentity;
+
+document.querySelectorAll(".identity-option").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const name = btn.dataset.name;
+    await api("/api/auth/identity", "POST", { name });
+    applyIdentity(name);
+    window.showMain();
+  });
+});
+
+document.getElementById("identity-btn").addEventListener("click", async () => {
+  const other = window.currentIdentity === "sheldon" ? "partner" : "sheldon";
+  await api("/api/auth/identity", "POST", { name: other });
+  applyIdentity(other);
+  if (!homeView.hidden) loadDashboard();
+});
+
 // --- Navigation: three views —
 // home: a curated "what needs you today" digest (the default landing view)
 // browse: the section-tile grid, for looking at everything in a category
@@ -257,28 +288,32 @@ backBtn.addEventListener("click", showBrowse);
 brandBtn.addEventListener("click", showHome);
 browseBtn.addEventListener("click", showBrowse);
 
+const SECTION_OPENERS = {
+  calendar: () => openCalendar(),
+  decisions: () => openResource("decisions"),
+  household: () => (window.openHousehold ? openHousehold() : showDetail("Household")),
+  financial: () => (window.openFinancial ? openFinancial() : showDetail("Financial")),
+  meals: () => (window.openMeals ? openMeals() : showDetail("Meal planning")),
+};
+
 document.querySelectorAll(".section-tile").forEach((btn) => {
   btn.addEventListener("click", () => {
     const key = btn.dataset.resource;
-    if (key === "calendar") {
-      openCalendar();
-    } else {
-      openResource(key);
-    }
+    (SECTION_OPENERS[key] || (() => openResource(key)))();
   });
 });
 
 async function refreshHomeCounts() {
-  for (const [key, config] of Object.entries(RESOURCES)) {
-    const el = document.querySelector(`[data-count-for="${key}"]`);
-    if (!el) continue;
+  const decisionsEl = document.querySelector('[data-count-for="decisions"]');
+  if (decisionsEl) {
     try {
-      const items = await api(config.endpoint);
-      el.textContent = config.count(items);
+      const items = await api(RESOURCES.decisions.endpoint);
+      decisionsEl.textContent = RESOURCES.decisions.count(items);
     } catch {
-      el.textContent = "";
+      decisionsEl.textContent = "";
     }
   }
+
   const calEl = document.querySelector('[data-count-for="calendar"]');
   if (calEl) {
     try {
@@ -288,6 +323,25 @@ async function refreshHomeCounts() {
       calEl.textContent = "";
     }
   }
+
+  const householdEl = document.querySelector('[data-count-for="household"]');
+  if (householdEl) {
+    try {
+      const [bills, subscriptions, maintenance] = await Promise.all([
+        api("/api/bills"), api("/api/subscriptions"), api("/api/maintenance"),
+      ]);
+      const today = todayStr();
+      const dueCount = bills.filter((b) => !b.paid && b.due_date <= today).length
+        + subscriptions.filter((s) => s.active && s.renewal_date <= today).length
+        + maintenance.filter((m) => m.next_due && m.next_due <= today).length;
+      householdEl.textContent = dueCount === 0 ? "all caught up" : `${dueCount} due soon`;
+    } catch {
+      householdEl.textContent = "";
+    }
+  }
+
+  if (window.refreshFinancialCount) window.refreshFinancialCount();
+  if (window.refreshMealsCount) window.refreshMealsCount();
 }
 
 function buildForm(resourceKey, existing, onDone) {
@@ -438,6 +492,127 @@ async function openResource(resourceKey) {
 
   await refresh();
 }
+
+// --- Household: Bills, Subscriptions, Maintenance unified into one
+// tabbed screen with a summary strip and a single add button. ---
+
+function buildStripTag(value, label, warn) {
+  const tag = document.createElement("div");
+  tag.className = "strip-tag" + (warn ? " warn" : "");
+  tag.innerHTML = `<div class="st-val">${escapeHtml(String(value))}</div><div class="st-label">${escapeHtml(label)}</div>`;
+  return tag;
+}
+
+const HOUSEHOLD_TABS = ["bills", "subscriptions", "maintenance"];
+
+async function openHousehold() {
+  showDetail("Household");
+  let currentTab = "bills";
+
+  const summaryRow = document.createElement("div");
+  summaryRow.className = "summary-strip";
+  detailBody.appendChild(summaryRow);
+
+  const tabsRow = document.createElement("div");
+  tabsRow.className = "tabs";
+  detailBody.appendChild(tabsRow);
+
+  const tabContent = document.createElement("div");
+  detailBody.appendChild(tabContent);
+
+  const fab = document.createElement("button");
+  fab.type = "button";
+  fab.className = "fab";
+  fab.textContent = "+";
+  detailBody.appendChild(fab);
+
+  async function refreshSummary() {
+    const [bills, subscriptions, maintenance] = await Promise.all([
+      api("/api/bills"), api("/api/subscriptions"), api("/api/maintenance"),
+    ]);
+    const today = todayStr();
+    const dueSoon = bills.filter((b) => !b.paid && b.due_date <= today).length
+      + maintenance.filter((m) => m.next_due && m.next_due <= today).length;
+    const activeSubs = subscriptions.filter((s) => s.active).length;
+    const overdueMaint = maintenance.filter((m) => m.next_due && m.next_due < today).length;
+    summaryRow.innerHTML = "";
+    summaryRow.appendChild(buildStripTag(dueSoon, "Due soon", dueSoon > 0));
+    summaryRow.appendChild(buildStripTag(activeSubs, "Subs", false));
+    summaryRow.appendChild(buildStripTag(overdueMaint, "Overdue", overdueMaint > 0));
+  }
+
+  async function renderTab() {
+    tabContent.innerHTML = "";
+    const config = RESOURCES[currentTab];
+    const items = await api(config.endpoint);
+    if (items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "Nothing here yet.";
+      tabContent.appendChild(empty);
+    }
+    for (const item of items) {
+      const card = document.createElement("div");
+      card.className = "resource-card";
+      card.innerHTML = config.renderCard(item);
+
+      const btnRow = document.createElement("div");
+      btnRow.className = "card-actions";
+      for (const action of config.actions(item, () => { renderTab(); refreshSummary(); })) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = action.label;
+        btn.addEventListener("click", () => action.onClick().catch((err) => alert(err.message)));
+        btnRow.appendChild(btn);
+      }
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        const existingForm = card.querySelector("form");
+        if (existingForm) {
+          existingForm.remove();
+          return;
+        }
+        card.appendChild(buildForm(currentTab, item, () => { renderTab(); refreshSummary(); }));
+      });
+      btnRow.appendChild(editBtn);
+      card.appendChild(btnRow);
+      tabContent.appendChild(card);
+    }
+  }
+
+  for (const key of HOUSEHOLD_TABS) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (key === currentTab ? " active" : "");
+    tab.textContent = RESOURCES[key].label;
+    tab.dataset.tab = key;
+    tab.addEventListener("click", () => {
+      currentTab = key;
+      tabsRow.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === key));
+      renderTab();
+    });
+    tabsRow.appendChild(tab);
+  }
+
+  fab.addEventListener("click", () => {
+    const existingForm = tabContent.querySelector(":scope > .resource-form");
+    if (existingForm) {
+      existingForm.remove();
+      return;
+    }
+    const form = buildForm(currentTab, null, () => {
+      form.remove();
+      renderTab();
+      refreshSummary();
+    });
+    tabContent.insertBefore(form, tabContent.firstChild);
+  });
+
+  await refreshSummary();
+  await renderTab();
+}
+window.openHousehold = openHousehold;
 
 function localInputToIso(value) {
   return new Date(value).toISOString();
