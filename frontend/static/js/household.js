@@ -624,6 +624,8 @@ function isoToLocalInput(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const OWNER_LABELS = { sheldon: "Sheldon", partner: "Partner", shared: "shared" };
+
 function renderEventCard(event) {
   const start = new Date(event.start_time);
   const end = new Date(event.end_time);
@@ -632,29 +634,36 @@ function renderEventCard(event) {
     : `${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` +
       ` – ${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
   const loc = event.location ? ` · ${escapeHtml(event.location)}` : "";
-  return `<strong>${escapeHtml(event.title)}</strong><br>${fmt}${loc}`;
+  const owner = event.owner || "shared";
+  return `<div class="event-row-inner">
+      <div class="event-time">${fmt}</div>
+      <div style="flex:1"><strong>${escapeHtml(event.title)}</strong>${loc ? `<div class="muted">${loc.replace(" · ", "")}</div>` : ""}</div>
+      <span class="owner-pill ${owner}">${escapeHtml(OWNER_LABELS[owner] || owner)}</span>
+    </div>`;
 }
 
-function groupEventsByDay(events) {
-  const groups = [];
-  let currentKey = null;
-  let currentGroup = null;
-  for (const event of events) {
-    const d = new Date(event.start_time);
-    const key = d.toDateString();
-    if (key !== currentKey) {
-      currentKey = key;
-      currentGroup = { label: d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }), events: [] };
-      groups.push(currentGroup);
-    }
-    currentGroup.events.push(event);
-  }
-  return groups;
+function getWeekDays(anchor) {
+  const day = anchor.getDay(); // 0=Sun..6=Sat
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(anchor);
+  monday.setDate(anchor.getDate() + mondayOffset);
+  monday.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
 }
 
-function buildEventForm(existing, onDone) {
+function dateKey(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function buildEventForm(existing, defaultOwner, onDone) {
   const form = document.createElement("form");
   form.className = "resource-form";
+  let selectedOwner = existing ? existing.owner || "shared" : defaultOwner || "shared";
 
   const fields = [
     { name: "title", label: "Title", type: "text", required: true },
@@ -685,6 +694,24 @@ function buildEventForm(existing, onDone) {
     form.appendChild(input);
   }
 
+  const ownerLabel = document.createElement("label");
+  ownerLabel.textContent = "Whose calendar";
+  form.appendChild(ownerLabel);
+  const toggleRow = document.createElement("div");
+  toggleRow.className = "toggle-row";
+  for (const key of ["shared", "sheldon", "partner"]) {
+    const chip = document.createElement("div");
+    chip.className = "toggle-chip" + (selectedOwner === key ? " on" : "");
+    chip.textContent = OWNER_LABELS[key];
+    chip.addEventListener("click", () => {
+      selectedOwner = key;
+      toggleRow.querySelectorAll(".toggle-chip").forEach((c) => c.classList.remove("on"));
+      chip.classList.add("on");
+    });
+    toggleRow.appendChild(chip);
+  }
+  form.appendChild(toggleRow);
+
   const submitBtn = document.createElement("button");
   submitBtn.type = "submit";
   submitBtn.textContent = existing ? "Save changes" : "Add";
@@ -700,6 +727,7 @@ function buildEventForm(existing, onDone) {
       all_day: formData.get("all_day") === "on",
       location: formData.get("location") || null,
       description: formData.get("description") || null,
+      owner: selectedOwner,
     };
     try {
       if (existing) {
@@ -759,14 +787,44 @@ async function openCalendar() {
   toolbarRow.appendChild(disconnectBtn);
   detailBody.appendChild(toolbarRow);
 
+  const today = new Date();
+  const weekDays = getWeekDays(today);
+  let selectedDay = dateKey(today);
+
+  const dayTabsRow = document.createElement("div");
+  dayTabsRow.className = "day-tabs";
+  detailBody.appendChild(dayTabsRow);
+
+  const dayLabel = document.createElement("div");
+  dayLabel.className = "section-label";
+  detailBody.appendChild(dayLabel);
+
   const listEl = document.createElement("div");
   detailBody.appendChild(listEl);
 
-  const addBtn = document.createElement("button");
-  addBtn.type = "button";
-  addBtn.className = "add-btn";
-  addBtn.textContent = "+ Add event";
-  detailBody.appendChild(addBtn);
+  const fab = document.createElement("button");
+  fab.type = "button";
+  fab.className = "fab";
+  fab.textContent = "+";
+  detailBody.appendChild(fab);
+
+  let allEvents = [];
+
+  function renderDayTabs() {
+    dayTabsRow.innerHTML = "";
+    for (const d of weekDays) {
+      const key = dateKey(d);
+      const tab = document.createElement("div");
+      tab.className = "day-tab" + (key === selectedDay ? " active" : "");
+      tab.innerHTML = `<div class="dt-name">${d.toLocaleDateString(undefined, { weekday: "short" })}</div><div class="dt-num">${d.getDate()}</div>`;
+      tab.addEventListener("click", () => {
+        selectedDay = key;
+        renderDayTabs();
+        renderDayEvents();
+      });
+      dayTabsRow.appendChild(tab);
+    }
+  }
 
   function renderEventActions(event, card, refresh) {
     const btnRow = document.createElement("div");
@@ -781,7 +839,7 @@ async function openCalendar() {
         existingForm.remove();
         return;
       }
-      card.appendChild(buildEventForm(event, refresh));
+      card.appendChild(buildEventForm(event, event.owner, refresh));
     });
     btnRow.appendChild(editBtn);
 
@@ -798,30 +856,31 @@ async function openCalendar() {
     card.appendChild(btnRow);
   }
 
-  async function refresh() {
-    const events = await api("/api/calendar/events");
+  function renderDayEvents() {
+    const d = weekDays.find((wd) => dateKey(wd) === selectedDay) || today;
+    dayLabel.textContent = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+    const dayEvents = allEvents.filter((e) => dateKey(new Date(e.start_time)) === selectedDay);
     listEl.innerHTML = "";
-    if (events.length === 0) {
+    if (dayEvents.length === 0) {
       const empty = document.createElement("p");
       empty.className = "muted";
-      empty.textContent = "No events in the next ~3 months.";
+      empty.textContent = "Nothing on this day.";
       listEl.appendChild(empty);
       return;
     }
-    for (const group of groupEventsByDay(events)) {
-      const header = document.createElement("div");
-      header.className = "day-header";
-      header.textContent = group.label;
-      listEl.appendChild(header);
-
-      for (const event of group.events) {
-        const card = document.createElement("div");
-        card.className = "resource-card";
-        card.innerHTML = renderEventCard(event);
-        renderEventActions(event, card, refresh);
-        listEl.appendChild(card);
-      }
+    for (const event of dayEvents) {
+      const card = document.createElement("div");
+      card.className = `event-row ${event.owner || "shared"}`;
+      card.innerHTML = renderEventCard(event);
+      renderEventActions(event, card, refresh);
+      listEl.appendChild(card);
     }
+  }
+
+  async function refresh() {
+    allEvents = await api("/api/calendar/events");
+    renderDayEvents();
   }
 
   syncBtn.addEventListener("click", async () => {
@@ -844,19 +903,20 @@ async function openCalendar() {
     openCalendar();
   });
 
-  addBtn.addEventListener("click", () => {
+  fab.addEventListener("click", () => {
     const existingForm = detailBody.querySelector(".resource-form");
     if (existingForm) {
       existingForm.remove();
       return;
     }
-    const form = buildEventForm(null, () => {
+    const form = buildEventForm(null, "shared", () => {
       form.remove();
       refresh();
     });
-    detailBody.insertBefore(form, addBtn);
+    detailBody.insertBefore(form, fab);
   });
 
+  renderDayTabs();
   await refresh();
 }
 

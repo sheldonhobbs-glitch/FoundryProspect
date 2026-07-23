@@ -160,6 +160,7 @@ class CalendarEventBase(BaseModel):
     start_time: datetime
     end_time: datetime
     all_day: bool = False
+    owner: str = "shared"
 
     _tz_start = field_validator("start_time")(_assume_utc_if_naive)
     _tz_end = field_validator("end_time")(_assume_utc_if_naive)
@@ -176,6 +177,7 @@ class CalendarEventUpdate(BaseModel):
     start_time: datetime | None = None
     end_time: datetime | None = None
     all_day: bool | None = None
+    owner: str | None = None
 
     _tz_start = field_validator("start_time")(_assume_utc_if_naive)
     _tz_end = field_validator("end_time")(_assume_utc_if_naive)

@@ -124,7 +124,7 @@ def create_event(payload: CalendarEventCreate, db: Session = Depends(get_db)) ->
     event = CalendarEvent(
         google_event_id=g_event["id"], title=payload.title, description=payload.description,
         location=payload.location, start_time=payload.start_time, end_time=payload.end_time,
-        all_day=payload.all_day,
+        all_day=payload.all_day, owner=payload.owner,
     )
     db.add(event)
     db.commit()

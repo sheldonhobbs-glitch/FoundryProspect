@@ -548,6 +548,97 @@ body {
   z-index: 5;
 }
 
+/* --- Calendar: day tabs + owner-coded event rows --- */
+.day-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin: 10px 0 4px;
+}
+.day-tab {
+  flex-shrink: 0;
+  width: 46px;
+  text-align: center;
+  padding: 8px 0;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.day-tab .dt-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.day-tab .dt-num {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.day-tab.active {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.day-tab.active .dt-name,
+.day-tab.active .dt-num {
+  color: var(--bg);
+}
+
+.event-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.event-row.sheldon { border-left-color: var(--sheldon); }
+.event-row.partner { border-left-color: var(--partner); }
+.event-row.shared { border-left-color: var(--sage); }
+.event-row-inner {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.event-time {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  width: 90px;
+  flex-shrink: 0;
+}
+.owner-pill {
+  font-size: 9.5px;
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 2px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.owner-pill.sheldon { background: var(--sheldon-soft); color: var(--sheldon); }
+.owner-pill.partner { background: var(--partner-soft); color: var(--partner); }
+.owner-pill.shared { background: var(--sage-soft); color: var(--sage); }
+
+.toggle-row {
+  display: flex;
+  gap: 8px;
+}
+.toggle-chip {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+  font-size: 12px;
+  cursor: pointer;
+}
+.toggle-chip.on {
+  border-color: var(--sage);
+  background: var(--sage-soft);
+}
+
 /* --- Resource lists / cards / forms --- */
 .muted {
   color: var(--muted);

@@ -34,6 +34,10 @@ class CalendarEvent(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Whose calendar this belongs to — Ember-only metadata for display
+    # (color-coding, filtering); Google Calendar itself has no such concept
+    # since everything syncs through one shared calendar.
+    owner: Mapped[str] = mapped_column(String(20), default="shared", server_default="shared")
     last_synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
