@@ -153,44 +153,6 @@ const RESOURCES = {
       return items.length === 0 ? "" : `${items.length} item${items.length === 1 ? "" : "s"}`;
     },
   },
-  decisions: {
-    label: "Decisions",
-    endpoint: "/api/decisions",
-    fields: [
-      { name: "item", label: "Thing to decide", type: "text", required: true },
-      { name: "notes", label: "Notes", type: "textarea" },
-    ],
-    renderCard(item) {
-      if (item.status === "decided") {
-        return `<strong>${escapeHtml(item.item)}</strong> · ✅ decided ${item.decided_at}<br>
-          ${escapeHtml(item.decision)}`;
-      }
-      const notes = item.notes ? `<br><span class="muted">${escapeHtml(item.notes)}</span>` : "";
-      return `<strong>${escapeHtml(item.item)}</strong> · open${notes}`;
-    },
-    actions(item, refresh) {
-      if (item.status === "decided") {
-        return [
-          { label: "Reopen", onClick: () => api(`/api/decisions/${item.id}/reopen`, "POST").then(refresh) },
-        ];
-      }
-      return [
-        {
-          label: "Resolve",
-          onClick: async () => {
-            const decision = prompt(`What was decided about "${item.item}"?`);
-            if (!decision || !decision.trim()) return;
-            await api(`/api/decisions/${item.id}/resolve`, "POST", { decision });
-            refresh();
-          },
-        },
-      ];
-    },
-    count(items) {
-      const open = items.filter((i) => i.status === "open").length;
-      return items.length === 0 ? "" : open === 0 ? "all decided" : `${open} open`;
-    },
-  },
 };
 
 async function api(path, method = "GET", body) {
@@ -290,7 +252,7 @@ browseBtn.addEventListener("click", showBrowse);
 
 const SECTION_OPENERS = {
   calendar: () => openCalendar(),
-  decisions: () => openResource("decisions"),
+  decisions: () => openDecisions(),
   household: () => (window.openHousehold ? openHousehold() : showDetail("Household")),
   financial: () => (window.openFinancial ? openFinancial() : showDetail("Financial")),
   meals: () => (window.openMeals ? openMeals() : showDetail("Meal planning")),
@@ -307,8 +269,9 @@ async function refreshHomeCounts() {
   const decisionsEl = document.querySelector('[data-count-for="decisions"]');
   if (decisionsEl) {
     try {
-      const items = await api(RESOURCES.decisions.endpoint);
-      decisionsEl.textContent = RESOURCES.decisions.count(items);
+      const items = await api("/api/decisions");
+      const open = items.filter((i) => i.status === "open").length;
+      decisionsEl.textContent = items.length === 0 ? "" : open === 0 ? "all decided" : `${open} open`;
     } catch {
       decisionsEl.textContent = "";
     }
@@ -917,6 +880,244 @@ async function openCalendar() {
   });
 
   renderDayTabs();
+  await refresh();
+}
+
+// --- Decisions: multi-option voting. Both people vote from their own
+// identity; a decision resolves automatically when both pick the same
+// option, and stays open (showing "you disagree") otherwise. ---
+
+function decisionStatusText(decision) {
+  const votes = {};
+  for (const v of decision.votes) votes[v.voter] = v.option_id;
+  if (decision.status === "decided") {
+    return `Both voted ${decision.decision} · locked in`;
+  }
+  const voted = Object.keys(votes);
+  if (voted.length === 0) return "No votes yet";
+  if (voted.length === 1) {
+    const waitingOn = voted[0] === "sheldon" ? "Partner" : "Sheldon";
+    return `${IDENTITY_NAMES[voted[0]]} voted · awaiting ${waitingOn}`;
+  }
+  return "You disagree — needs a conversation, not a tiebreaker";
+}
+
+function buildDecisionCard(decision, refresh) {
+  const card = document.createElement("div");
+  card.className = "decision-card";
+
+  const top = document.createElement("div");
+  top.className = "dc-top";
+  const title = document.createElement("div");
+  title.className = "dc-title";
+  title.textContent = decision.item;
+  const pill = document.createElement("span");
+  pill.className = `status-pill ${decision.status === "decided" ? "resolved" : "open"}`;
+  pill.textContent = decision.status === "decided" ? "resolved" : "open";
+  top.appendChild(title);
+  top.appendChild(pill);
+  card.appendChild(top);
+
+  const votesByVoter = {};
+  for (const v of decision.votes) votesByVoter[v.voter] = v.option_id;
+
+  const avatarsRow = document.createElement("div");
+  avatarsRow.className = "vote-avatars";
+  for (const name of Object.keys(IDENTITY_NAMES)) {
+    const av = document.createElement("div");
+    av.className = `v-avatar ${name in votesByVoter ? name : "pending"}`;
+    av.textContent = name === "sheldon" ? "S" : "P";
+    avatarsRow.appendChild(av);
+  }
+  card.appendChild(avatarsRow);
+
+  const statusText = document.createElement("div");
+  statusText.className = "dc-status-text";
+  statusText.textContent = decisionStatusText(decision);
+  card.appendChild(statusText);
+
+  if (decision.notes) {
+    const notesEl = document.createElement("div");
+    notesEl.className = "muted";
+    notesEl.style.marginTop = "6px";
+    notesEl.textContent = decision.notes;
+    card.appendChild(notesEl);
+  }
+
+  const optionsWrap = document.createElement("div");
+  optionsWrap.hidden = true;
+  optionsWrap.style.marginTop = "10px";
+
+  for (const option of decision.options) {
+    const row = document.createElement("div");
+    row.className = "option-row";
+    const isMyVote = votesByVoter[window.currentIdentity] === option.id;
+    const isWinner = decision.status === "decided" && decision.decision === option.text;
+    if (isWinner) row.classList.add("resolved-winner");
+    else if (isMyVote) row.classList.add("my-vote");
+
+    const optTitle = document.createElement("div");
+    optTitle.className = "opt-title";
+    optTitle.textContent = option.text;
+    row.appendChild(optTitle);
+
+    const votersRow = document.createElement("div");
+    votersRow.className = "opt-voters";
+    for (const [voter, optId] of Object.entries(votesByVoter)) {
+      if (optId !== option.id) continue;
+      const av = document.createElement("div");
+      av.className = `v-avatar ${voter}`;
+      av.textContent = voter === "sheldon" ? "S" : "P";
+      votersRow.appendChild(av);
+    }
+    row.appendChild(votersRow);
+
+    row.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await api(`/api/decisions/${decision.id}/vote`, "POST", { option_id: option.id });
+        refresh();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    optionsWrap.appendChild(row);
+  }
+
+  const utilityRow = document.createElement("div");
+  utilityRow.className = "card-actions";
+  if (decision.status === "decided") {
+    const reopenBtn = document.createElement("button");
+    reopenBtn.type = "button";
+    reopenBtn.textContent = "Reopen for a new vote";
+    reopenBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("Reopen this decision? Existing votes will be cleared.")) return;
+      await api(`/api/decisions/${decision.id}/reopen`, "POST");
+      refresh();
+    });
+    utilityRow.appendChild(reopenBtn);
+  }
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.textContent = "Delete";
+  deleteBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!confirm(`Delete "${decision.item}"?`)) return;
+    await api(`/api/decisions/${decision.id}`, "DELETE");
+    refresh();
+  });
+  utilityRow.appendChild(deleteBtn);
+  optionsWrap.appendChild(utilityRow);
+
+  card.appendChild(optionsWrap);
+  card.addEventListener("click", () => {
+    optionsWrap.hidden = !optionsWrap.hidden;
+  });
+
+  return card;
+}
+
+function buildNewDecisionForm(onDone) {
+  const form = document.createElement("form");
+  form.className = "resource-form";
+
+  const questionLabel = document.createElement("label");
+  questionLabel.textContent = "Question";
+  form.appendChild(questionLabel);
+  const questionInput = document.createElement("textarea");
+  questionInput.name = "item";
+  questionInput.required = true;
+  form.appendChild(questionInput);
+
+  const optionsLabel = document.createElement("label");
+  optionsLabel.textContent = "Options";
+  form.appendChild(optionsLabel);
+  const optionsWrap = document.createElement("div");
+  form.appendChild(optionsWrap);
+
+  function addOptionInput(placeholder) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.name = "option";
+    input.placeholder = placeholder;
+    input.required = true;
+    optionsWrap.appendChild(input);
+  }
+  addOptionInput("Option 1");
+  addOptionInput("Option 2");
+
+  const addOptionBtn = document.createElement("div");
+  addOptionBtn.className = "add-btn";
+  addOptionBtn.textContent = "+ Add another option";
+  addOptionBtn.addEventListener("click", () => addOptionInput(`Option ${optionsWrap.children.length + 1}`));
+  form.appendChild(addOptionBtn);
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.textContent = "Create decision";
+  form.appendChild(submitBtn);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const item = questionInput.value.trim();
+    const options = Array.from(optionsWrap.querySelectorAll('input[name="option"]'))
+      .map((i) => i.value.trim())
+      .filter(Boolean);
+    if (!item || options.length < 2) {
+      alert("Add a question and at least two options.");
+      return;
+    }
+    try {
+      await api("/api/decisions", "POST", { item, options });
+      onDone();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  return form;
+}
+
+async function openDecisions() {
+  showDetail("Decisions");
+
+  const listEl = document.createElement("div");
+  detailBody.appendChild(listEl);
+
+  const fab = document.createElement("button");
+  fab.type = "button";
+  fab.className = "fab";
+  fab.textContent = "+";
+  detailBody.appendChild(fab);
+
+  async function refresh() {
+    const decisions = await api("/api/decisions");
+    listEl.innerHTML = "";
+    if (decisions.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No decisions yet.";
+      listEl.appendChild(empty);
+    }
+    for (const decision of decisions) {
+      listEl.appendChild(buildDecisionCard(decision, refresh));
+    }
+  }
+
+  fab.addEventListener("click", () => {
+    const existingForm = detailBody.querySelector(".resource-form");
+    if (existingForm) {
+      existingForm.remove();
+      return;
+    }
+    const form = buildNewDecisionForm(() => {
+      form.remove();
+      refresh();
+    });
+    detailBody.insertBefore(form, fab);
+  });
+
   await refresh();
 }
 

@@ -198,13 +198,35 @@ class CalendarStatus(BaseModel):
     calendar_id: str
 
 
+class DecisionOptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    text: str
+
+
+class DecisionVoteRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    option_id: int
+    voter: str
+
+
 class DecisionBase(BaseModel):
     item: str
     notes: str | None = None
 
 
 class DecisionCreate(DecisionBase):
-    pass
+    options: list[str]
+
+    @field_validator("options")
+    @classmethod
+    def _at_least_two_options(cls, v: list[str]) -> list[str]:
+        cleaned = [o.strip() for o in v if o.strip()]
+        if len(cleaned) < 2:
+            raise ValueError("A decision needs at least two options.")
+        return cleaned
 
 
 class DecisionUpdate(BaseModel):
@@ -212,8 +234,8 @@ class DecisionUpdate(BaseModel):
     notes: str | None = None
 
 
-class DecisionResolve(BaseModel):
-    decision: str
+class DecisionVoteCreate(BaseModel):
+    option_id: int
 
 
 class DecisionRead(DecisionBase):
@@ -225,3 +247,5 @@ class DecisionRead(DecisionBase):
     decided_at: date | None = None
     created_at: datetime
     updated_at: datetime
+    options: list[DecisionOptionRead] = []
+    votes: list[DecisionVoteRead] = []

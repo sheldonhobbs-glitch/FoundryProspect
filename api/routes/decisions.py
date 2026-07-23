@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.deps import require_auth
-from api.schemas import DecisionCreate, DecisionRead, DecisionResolve, DecisionUpdate
-from db.models import Decision, DecisionStatus
+from api.deps import IDENTITIES, get_identity, require_auth
+from api.schemas import DecisionCreate, DecisionRead, DecisionUpdate, DecisionVoteCreate
+from db.models import Decision, DecisionOption, DecisionStatus, DecisionVote
 from db.session import get_db
 
 router = APIRouter(prefix="/decisions", tags=["decisions"], dependencies=[Depends(require_auth)])
@@ -26,7 +26,8 @@ def list_decisions(db: Session = Depends(get_db)) -> list[Decision]:
 
 @router.post("", response_model=DecisionRead, status_code=201)
 def create_decision(payload: DecisionCreate, db: Session = Depends(get_db)) -> Decision:
-    decision = Decision(**payload.model_dump())
+    decision = Decision(item=payload.item, notes=payload.notes)
+    decision.options = [DecisionOption(text=text) for text in payload.options]
     db.add(decision)
     db.commit()
     db.refresh(decision)
@@ -55,12 +56,36 @@ def delete_decision(decision_id: int, db: Session = Depends(get_db)) -> None:
     db.commit()
 
 
-@router.post("/{decision_id}/resolve", response_model=DecisionRead)
-def resolve_decision(decision_id: int, payload: DecisionResolve, db: Session = Depends(get_db)) -> Decision:
+@router.post("/{decision_id}/vote", response_model=DecisionRead)
+def vote_decision(
+    decision_id: int, payload: DecisionVoteCreate, db: Session = Depends(get_db),
+    identity: str | None = Depends(get_identity),
+) -> Decision:
+    if identity not in IDENTITIES:
+        raise HTTPException(status_code=400, detail="Pick who you are (Sheldon/Partner) before voting.")
     decision = _get_or_404(db, decision_id)
-    decision.status = DecisionStatus.decided
-    decision.decision = payload.decision
-    decision.decided_at = date.today()
+    option = db.get(DecisionOption, payload.option_id)
+    if option is None or option.decision_id != decision.id:
+        raise HTTPException(status_code=404, detail="Option not found on this decision")
+
+    existing_vote = db.query(DecisionVote).filter_by(decision_id=decision.id, voter=identity).first()
+    if existing_vote:
+        existing_vote.option_id = option.id
+    else:
+        db.add(DecisionVote(decision_id=decision.id, option_id=option.id, voter=identity))
+    db.commit()
+    db.refresh(decision)
+
+    votes_by_voter = {v.voter: v.option_id for v in decision.votes}
+    if set(votes_by_voter) >= set(IDENTITIES) and len(set(votes_by_voter.values())) == 1:
+        winning_option = db.get(DecisionOption, next(iter(votes_by_voter.values())))
+        decision.status = DecisionStatus.decided
+        decision.decision = winning_option.text
+        decision.decided_at = date.today()
+    else:
+        decision.status = DecisionStatus.open
+        decision.decision = None
+        decision.decided_at = None
     db.commit()
     db.refresh(decision)
     return decision
@@ -72,6 +97,7 @@ def reopen_decision(decision_id: int, db: Session = Depends(get_db)) -> Decision
     decision.status = DecisionStatus.open
     decision.decision = None
     decision.decided_at = None
+    db.query(DecisionVote).filter_by(decision_id=decision.id).delete()
     db.commit()
     db.refresh(decision)
     return decision
