@@ -1,36 +1,30 @@
 const loginScreen = document.getElementById("login-screen");
-const chatScreen = document.getElementById("chat-screen");
+const mainScreen = document.getElementById("main-screen");
 const logoutBtn = document.getElementById("logout-btn");
-const chatLog = document.getElementById("chat-log");
+const statusBubble = document.getElementById("status-bubble");
 
-function addBubble(text, kind = "system") {
-  const div = document.createElement("div");
-  div.className = `bubble ${kind}`;
-  div.textContent = text;
-  chatLog.appendChild(div);
-  chatLog.scrollTop = chatLog.scrollHeight;
+function setStatus(text) {
+  statusBubble.textContent = text;
+  statusBubble.hidden = false;
 }
 
-function showChat() {
+function showMain() {
   loginScreen.hidden = true;
-  chatScreen.hidden = false;
-  chatLog.innerHTML = "";
-  addBubble("Welcome back. Ember is online.");
+  mainScreen.hidden = false;
+  statusBubble.hidden = true;
+
   fetch("/api/health")
     .then((r) => r.json())
     .then((data) => {
-      addBubble(
-        data.database
-          ? "Database connection: healthy."
-          : "Database connection: unreachable — check DATABASE_URL.",
-      );
+      if (!data.database) setStatus("Database connection: unreachable — check DATABASE_URL.");
     })
-    .catch(() => addBubble("Could not reach the API."));
-  if (window.loadNotifications) loadNotifications();
+    .catch(() => setStatus("Could not reach the API."));
+
+  if (window.showHome) showHome();
 }
 
 function showLogin() {
-  chatScreen.hidden = true;
+  mainScreen.hidden = true;
   loginScreen.hidden = false;
 }
 
@@ -38,7 +32,7 @@ async function checkSession() {
   const res = await fetch("/api/auth/me");
   const data = await res.json();
   if (data.authenticated) {
-    showChat();
+    showMain();
   } else {
     showLogin();
   }

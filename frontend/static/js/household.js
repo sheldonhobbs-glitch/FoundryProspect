@@ -56,6 +56,10 @@ const RESOURCES = {
       }
       return actions;
     },
+    count(items) {
+      const unpaid = items.filter((i) => !i.paid).length;
+      return items.length === 0 ? "" : unpaid === 0 ? "all paid" : `${unpaid} unpaid`;
+    },
   },
   subscriptions: {
     label: "Subscriptions",
@@ -88,6 +92,10 @@ const RESOURCES = {
         },
       ];
     },
+    count(items) {
+      const active = items.filter((i) => i.active).length;
+      return items.length === 0 ? "" : `${active} active`;
+    },
   },
   maintenance: {
     label: "Maintenance",
@@ -119,6 +127,9 @@ const RESOURCES = {
         { label: "Mark done", onClick: () => api(`/api/maintenance/${item.id}/mark-done`, "POST").then(refresh) },
       ];
     },
+    count(items) {
+      return items.length === 0 ? "" : `${items.length} item${items.length === 1 ? "" : "s"}`;
+    },
   },
   warranties: {
     label: "Warranties",
@@ -137,6 +148,9 @@ const RESOURCES = {
     },
     actions() {
       return [];
+    },
+    count(items) {
+      return items.length === 0 ? "" : `${items.length} item${items.length === 1 ? "" : "s"}`;
     },
   },
   decisions: {
@@ -172,6 +186,10 @@ const RESOURCES = {
         },
       ];
     },
+    count(items) {
+      const open = items.filter((i) => i.status === "open").length;
+      return items.length === 0 ? "" : open === 0 ? "all decided" : `${open} open`;
+    },
   },
 };
 
@@ -186,6 +204,68 @@ async function api(path, method = "GET", body) {
     throw new Error(detail.detail || `${method} ${path} failed (${res.status})`);
   }
   return res.status === 204 ? null : res.json();
+}
+
+// --- Navigation: a home view (status, reminders, section tiles) and a
+// detail view (one section at a time). Sections render INTO detail-body
+// and replace whatever was there before — nothing accumulates. ---
+
+const homeView = document.getElementById("home-view");
+const detailView = document.getElementById("detail-view");
+const detailTitle = document.getElementById("detail-title");
+const detailBody = document.getElementById("detail-body");
+const backBtn = document.getElementById("back-btn");
+const notificationsList = document.getElementById("notifications-list");
+
+function showDetail(title) {
+  homeView.hidden = true;
+  detailView.hidden = false;
+  detailTitle.textContent = title;
+  detailBody.innerHTML = "";
+  window.scrollTo(0, 0);
+}
+
+function showHome() {
+  detailView.hidden = true;
+  homeView.hidden = false;
+  loadNotifications();
+  refreshHomeCounts();
+  window.scrollTo(0, 0);
+}
+
+backBtn.addEventListener("click", showHome);
+
+document.querySelectorAll(".section-tile").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const key = btn.dataset.resource;
+    if (key === "calendar") {
+      openCalendar();
+    } else {
+      openResource(key);
+    }
+  });
+});
+
+async function refreshHomeCounts() {
+  for (const [key, config] of Object.entries(RESOURCES)) {
+    const el = document.querySelector(`[data-count-for="${key}"]`);
+    if (!el) continue;
+    try {
+      const items = await api(config.endpoint);
+      el.textContent = config.count(items);
+    } catch {
+      el.textContent = "";
+    }
+  }
+  const calEl = document.querySelector('[data-count-for="calendar"]');
+  if (calEl) {
+    try {
+      const events = await api("/api/calendar/events");
+      calEl.textContent = events.length === 0 ? "" : `${events.length} upcoming`;
+    } catch {
+      calEl.textContent = "";
+    }
+  }
 }
 
 function buildForm(resourceKey, existing, onDone) {
@@ -267,25 +347,16 @@ function buildForm(resourceKey, existing, onDone) {
 
 async function openResource(resourceKey) {
   const config = RESOURCES[resourceKey];
-  const bubble = document.createElement("div");
-  bubble.className = "bubble system resource-bubble";
-
-  const title = document.createElement("div");
-  title.className = "resource-title";
-  title.textContent = config.label;
-  bubble.appendChild(title);
+  showDetail(config.label);
 
   const listEl = document.createElement("div");
-  bubble.appendChild(listEl);
+  detailBody.appendChild(listEl);
 
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "add-btn";
   addBtn.textContent = `+ Add ${config.label.toLowerCase().replace(/s$/, "")}`;
-  bubble.appendChild(addBtn);
-
-  chatLog.appendChild(bubble);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  detailBody.appendChild(addBtn);
 
   async function refresh() {
     const items = await api(config.endpoint);
@@ -331,7 +402,7 @@ async function openResource(resourceKey) {
   }
 
   addBtn.addEventListener("click", () => {
-    const existingForm = bubble.querySelector(".resource-form:not(.resource-card .resource-form)");
+    const existingForm = detailBody.querySelector(".resource-form:not(.resource-card .resource-form)");
     if (existingForm) {
       existingForm.remove();
       return;
@@ -340,7 +411,7 @@ async function openResource(resourceKey) {
       form.remove();
       refresh();
     });
-    bubble.insertBefore(form, addBtn);
+    detailBody.insertBefore(form, addBtn);
   });
 
   await refresh();
@@ -360,11 +431,28 @@ function renderEventCard(event) {
   const start = new Date(event.start_time);
   const end = new Date(event.end_time);
   const fmt = event.all_day
-    ? start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
-    : `${start.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` +
+    ? "All day"
+    : `${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` +
       ` – ${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
   const loc = event.location ? ` · ${escapeHtml(event.location)}` : "";
   return `<strong>${escapeHtml(event.title)}</strong><br>${fmt}${loc}`;
+}
+
+function groupEventsByDay(events) {
+  const groups = [];
+  let currentKey = null;
+  let currentGroup = null;
+  for (const event of events) {
+    const d = new Date(event.start_time);
+    const key = d.toDateString();
+    if (key !== currentKey) {
+      currentKey = key;
+      currentGroup = { label: d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }), events: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.events.push(event);
+  }
+  return groups;
 }
 
 function buildEventForm(existing, onDone) {
@@ -432,27 +520,15 @@ function buildEventForm(existing, onDone) {
 }
 
 async function openCalendar() {
-  const bubble = document.createElement("div");
-  bubble.className = "bubble system resource-bubble";
-
-  const title = document.createElement("div");
-  title.className = "resource-title";
-  title.textContent = "Calendar";
-  bubble.appendChild(title);
-
-  const body = document.createElement("div");
-  bubble.appendChild(body);
-
-  chatLog.appendChild(bubble);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  showDetail("Calendar");
 
   const status = await api("/api/calendar/status").catch(() => null);
   if (!status) {
-    body.innerHTML = '<p class="muted">Could not reach the calendar API.</p>';
+    detailBody.innerHTML = '<p class="muted">Could not reach the calendar API.</p>';
     return;
   }
   if (!status.configured) {
-    body.innerHTML =
+    detailBody.innerHTML =
       '<p class="muted">Google Calendar isn\'t set up yet — add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env first.</p>';
     return;
   }
@@ -463,7 +539,7 @@ async function openCalendar() {
     connectLink.style.display = "block";
     connectLink.style.textAlign = "center";
     connectLink.textContent = "Connect Google Calendar";
-    body.appendChild(connectLink);
+    detailBody.appendChild(connectLink);
     return;
   }
 
@@ -472,7 +548,7 @@ async function openCalendar() {
   infoRow.textContent = status.google_account_email
     ? `Connected as ${status.google_account_email}`
     : "Connected";
-  body.appendChild(infoRow);
+  detailBody.appendChild(infoRow);
 
   const toolbarRow = document.createElement("div");
   toolbarRow.className = "card-actions";
@@ -484,16 +560,46 @@ async function openCalendar() {
   disconnectBtn.textContent = "Disconnect";
   toolbarRow.appendChild(syncBtn);
   toolbarRow.appendChild(disconnectBtn);
-  body.appendChild(toolbarRow);
+  detailBody.appendChild(toolbarRow);
 
   const listEl = document.createElement("div");
-  body.appendChild(listEl);
+  detailBody.appendChild(listEl);
 
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "add-btn";
   addBtn.textContent = "+ Add event";
-  body.appendChild(addBtn);
+  detailBody.appendChild(addBtn);
+
+  function renderEventActions(event, card, refresh) {
+    const btnRow = document.createElement("div");
+    btnRow.className = "card-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => {
+      const existingForm = card.querySelector("form");
+      if (existingForm) {
+        existingForm.remove();
+        return;
+      }
+      card.appendChild(buildEventForm(event, refresh));
+    });
+    btnRow.appendChild(editBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete "${event.title}"?`)) return;
+      await api(`/api/calendar/events/${event.id}`, "DELETE");
+      refresh();
+    });
+    btnRow.appendChild(deleteBtn);
+
+    card.appendChild(btnRow);
+  }
 
   async function refresh() {
     const events = await api("/api/calendar/events");
@@ -503,40 +609,21 @@ async function openCalendar() {
       empty.className = "muted";
       empty.textContent = "No events in the next ~3 months.";
       listEl.appendChild(empty);
+      return;
     }
-    for (const event of events) {
-      const card = document.createElement("div");
-      card.className = "resource-card";
-      card.innerHTML = renderEventCard(event);
+    for (const group of groupEventsByDay(events)) {
+      const header = document.createElement("div");
+      header.className = "day-header";
+      header.textContent = group.label;
+      listEl.appendChild(header);
 
-      const btnRow = document.createElement("div");
-      btnRow.className = "card-actions";
-
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.textContent = "Edit";
-      editBtn.addEventListener("click", () => {
-        const existingForm = card.querySelector("form");
-        if (existingForm) {
-          existingForm.remove();
-          return;
-        }
-        card.appendChild(buildEventForm(event, refresh));
-      });
-      btnRow.appendChild(editBtn);
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.textContent = "Delete";
-      deleteBtn.addEventListener("click", async () => {
-        if (!confirm(`Delete "${event.title}"?`)) return;
-        await api(`/api/calendar/events/${event.id}`, "DELETE");
-        refresh();
-      });
-      btnRow.appendChild(deleteBtn);
-
-      card.appendChild(btnRow);
-      listEl.appendChild(card);
+      for (const event of group.events) {
+        const card = document.createElement("div");
+        card.className = "resource-card";
+        card.innerHTML = renderEventCard(event);
+        renderEventActions(event, card, refresh);
+        listEl.appendChild(card);
+      }
     }
   }
 
@@ -557,12 +644,11 @@ async function openCalendar() {
   disconnectBtn.addEventListener("click", async () => {
     if (!confirm("Disconnect Google Calendar?")) return;
     await api("/api/calendar/disconnect", "POST");
-    bubble.remove();
     openCalendar();
   });
 
   addBtn.addEventListener("click", () => {
-    const existingForm = body.querySelector(".resource-form");
+    const existingForm = detailBody.querySelector(".resource-form");
     if (existingForm) {
       existingForm.remove();
       return;
@@ -571,13 +657,14 @@ async function openCalendar() {
       form.remove();
       refresh();
     });
-    body.insertBefore(form, addBtn);
+    detailBody.insertBefore(form, addBtn);
   });
 
   await refresh();
 }
 
 async function loadNotifications() {
+  notificationsList.innerHTML = "";
   const notifications = await api("/api/notifications").catch(() => []);
   for (const n of notifications) {
     const bubble = document.createElement("div");
@@ -591,16 +678,6 @@ async function loadNotifications() {
       bubble.remove();
     });
     bubble.appendChild(dismissBtn);
-    chatLog.appendChild(bubble);
+    notificationsList.appendChild(bubble);
   }
 }
-
-document.querySelectorAll("#quick-actions button").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (btn.dataset.resource === "calendar") {
-      openCalendar();
-    } else {
-      openResource(btn.dataset.resource);
-    }
-  });
-});

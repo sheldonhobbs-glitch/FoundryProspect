@@ -24,27 +24,54 @@
       </div>
     </section>
 
-    <!-- Chat-style main screen -->
-    <section id="chat-screen" class="screen" hidden>
-      <header class="chat-header">
+    <!-- Main screen: a home view (status + reminders + section shortcuts)
+         and a detail view (one section at a time, navigated into and
+         back out of) — not an ever-growing feed. -->
+    <section id="main-screen" class="screen" hidden>
+      <header class="app-header">
         <span class="brand">🔥 Ember</span>
         <button id="logout-btn" class="link-btn">Log out</button>
       </header>
 
-      <nav id="quick-actions">
-        <button type="button" data-resource="bills">Bills</button>
-        <button type="button" data-resource="subscriptions">Subscriptions</button>
-        <button type="button" data-resource="maintenance">Maintenance</button>
-        <button type="button" data-resource="warranties">Warranties</button>
-        <button type="button" data-resource="calendar">Calendar</button>
-        <button type="button" data-resource="decisions">Decisions</button>
-      </nav>
+      <main id="content-area">
+        <div id="home-view">
+          <div id="status-bubble" class="bubble system" hidden></div>
+          <div id="notifications-list"></div>
 
-      <main id="chat-log" class="chat-log"></main>
+          <div id="section-grid">
+            <button type="button" class="section-tile" data-resource="bills">
+              <span class="tile-label">Bills</span>
+              <span class="tile-count" data-count-for="bills"></span>
+            </button>
+            <button type="button" class="section-tile" data-resource="subscriptions">
+              <span class="tile-label">Subscriptions</span>
+              <span class="tile-count" data-count-for="subscriptions"></span>
+            </button>
+            <button type="button" class="section-tile" data-resource="maintenance">
+              <span class="tile-label">Maintenance</span>
+              <span class="tile-count" data-count-for="maintenance"></span>
+            </button>
+            <button type="button" class="section-tile" data-resource="warranties">
+              <span class="tile-label">Warranties</span>
+              <span class="tile-count" data-count-for="warranties"></span>
+            </button>
+            <button type="button" class="section-tile" data-resource="calendar">
+              <span class="tile-label">Calendar</span>
+              <span class="tile-count" data-count-for="calendar"></span>
+            </button>
+            <button type="button" class="section-tile" data-resource="decisions">
+              <span class="tile-label">Decisions</span>
+              <span class="tile-count" data-count-for="decisions"></span>
+            </button>
+          </div>
+        </div>
 
-      <footer class="chat-input-bar">
-        <input id="chat-input" type="text" placeholder="Ember is listening... (chat features arrive in later phases)" disabled />
-      </footer>
+        <div id="detail-view" hidden>
+          <button type="button" id="back-btn">← Back</button>
+          <h2 id="detail-title"></h2>
+          <div id="detail-body"></div>
+        </div>
+      </main>
     </section>
   </div>
 
