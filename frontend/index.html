@@ -4,8 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Ember</title>
-  <meta name="theme-color" content="#e8734a" />
+  <meta name="theme-color" content="#C98A3E" />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,500&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
@@ -24,20 +27,34 @@
       </div>
     </section>
 
-    <!-- Main screen: a home view (status + reminders + section shortcuts)
-         and a detail view (one section at a time, navigated into and
-         back out of) — not an ever-growing feed. -->
+    <!-- Main screen: home is a curated "what needs you today" digest.
+         Browse is the full section-tile grid for looking at everything in
+         a category, not just what's due. Detail is one section at a time,
+         opened from Browse and closed back to it. -->
     <section id="main-screen" class="screen" hidden>
       <header class="app-header">
-        <span class="brand">🔥 Ember</span>
-        <button id="logout-btn" class="link-btn">Log out</button>
+        <button type="button" id="brand-btn" class="brand-btn">🔥 Ember</button>
+        <div class="header-actions">
+          <button type="button" id="browse-btn" class="link-btn">Browse</button>
+          <button type="button" id="logout-btn" class="link-btn">Log out</button>
+        </div>
       </header>
 
       <main id="content-area">
         <div id="home-view">
+          <div class="digest-header">
+            <div class="digest-date" id="digest-date"></div>
+            <h1 id="digest-greeting"></h1>
+            <p class="digest-sub" id="digest-sub"></p>
+          </div>
+
           <div id="status-bubble" class="bubble system" hidden></div>
           <div id="notifications-list"></div>
+          <div id="digest-feed"></div>
+        </div>
 
+        <div id="browse-view" hidden>
+          <h2 class="browse-title">Browse</h2>
           <div id="section-grid">
             <button type="button" class="section-tile" data-resource="bills">
               <span class="tile-label">Bills</span>
@@ -67,11 +84,20 @@
         </div>
 
         <div id="detail-view" hidden>
-          <button type="button" id="back-btn">← Back</button>
+          <button type="button" id="back-btn">← Browse</button>
           <h2 id="detail-title"></h2>
           <div id="detail-body"></div>
         </div>
       </main>
+
+      <div class="composer" id="composer-bar">
+        <div class="composer-inner">
+          <input type="text" id="composer-input" placeholder="Add a reminder, item, or note…" />
+          <button type="button" id="composer-send" class="send-btn">↑</button>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
     </section>
   </div>
 

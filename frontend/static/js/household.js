@@ -206,34 +206,56 @@ async function api(path, method = "GET", body) {
   return res.status === 204 ? null : res.json();
 }
 
-// --- Navigation: a home view (status, reminders, section tiles) and a
-// detail view (one section at a time). Sections render INTO detail-body
-// and replace whatever was there before — nothing accumulates. ---
+// --- Navigation: three views —
+// home: a curated "what needs you today" digest (the default landing view)
+// browse: the section-tile grid, for looking at everything in a category
+// detail: one section at a time, opened from browse and closed back to it
+// Sections render INTO detail-body and replace whatever was there before —
+// nothing accumulates. ---
 
 const homeView = document.getElementById("home-view");
+const browseView = document.getElementById("browse-view");
 const detailView = document.getElementById("detail-view");
 const detailTitle = document.getElementById("detail-title");
 const detailBody = document.getElementById("detail-body");
 const backBtn = document.getElementById("back-btn");
 const notificationsList = document.getElementById("notifications-list");
+const composerBar = document.getElementById("composer-bar");
+const brandBtn = document.getElementById("brand-btn");
+const browseBtn = document.getElementById("browse-btn");
 
 function showDetail(title) {
   homeView.hidden = true;
+  browseView.hidden = true;
   detailView.hidden = false;
+  composerBar.hidden = true;
   detailTitle.textContent = title;
   detailBody.innerHTML = "";
   window.scrollTo(0, 0);
 }
 
-function showHome() {
+function showBrowse() {
   detailView.hidden = true;
-  homeView.hidden = false;
-  loadNotifications();
+  homeView.hidden = true;
+  browseView.hidden = false;
+  composerBar.hidden = true;
   refreshHomeCounts();
   window.scrollTo(0, 0);
 }
 
-backBtn.addEventListener("click", showHome);
+function showHome() {
+  detailView.hidden = true;
+  browseView.hidden = true;
+  homeView.hidden = false;
+  composerBar.hidden = false;
+  loadNotifications();
+  loadDashboard();
+  window.scrollTo(0, 0);
+}
+
+backBtn.addEventListener("click", showBrowse);
+brandBtn.addEventListener("click", showHome);
+browseBtn.addEventListener("click", showBrowse);
 
 document.querySelectorAll(".section-tile").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -681,3 +703,266 @@ async function loadNotifications() {
     notificationsList.appendChild(bubble);
   }
 }
+
+// --- Home digest: "what needs you today", curated from every resource
+// rather than an unfiltered dump. Actionable items (bills/subscriptions/
+// maintenance due) get a tap-to-complete checkbox; calendar events and
+// open decisions expand in place for more detail. ---
+
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+
+function showToast(message) {
+  toastEl.textContent = message;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2200);
+}
+
+function todayStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function renderDigestHeader() {
+  const today = new Date();
+  document.getElementById("digest-date").textContent = today.toLocaleDateString(undefined, {
+    weekday: "long", day: "numeric", month: "long",
+  });
+  const hour = today.getHours();
+  const greeting = hour < 12 ? "Morning." : hour < 18 ? "Afternoon." : "Evening.";
+  document.getElementById("digest-greeting").textContent = greeting;
+}
+
+function buildFeedCard({ icon, iconClass, title, meta, urgent, checkbox, onCheck, expandHtml }) {
+  const card = document.createElement("div");
+  card.className = "feed-card" + (expandHtml ? "" : " static");
+
+  const row = document.createElement("div");
+  row.className = "feed-row";
+
+  const badge = document.createElement("div");
+  badge.className = `icon-badge ${iconClass}`;
+  badge.textContent = icon;
+  row.appendChild(badge);
+
+  const textWrap = document.createElement("div");
+  textWrap.style.flex = "1";
+  const titleEl = document.createElement("div");
+  titleEl.className = "card-title";
+  titleEl.textContent = title;
+  const metaEl = document.createElement("div");
+  metaEl.className = "card-meta" + (urgent ? " urgent" : "");
+  metaEl.textContent = meta;
+  textWrap.appendChild(titleEl);
+  textWrap.appendChild(metaEl);
+  row.appendChild(textWrap);
+
+  if (checkbox) {
+    const check = document.createElement("div");
+    check.className = "checkbox";
+    row.appendChild(check);
+    check.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      check.classList.add("checked");
+      card.classList.add("done");
+      try {
+        await onCheck();
+      } catch (err) {
+        check.classList.remove("checked");
+        card.classList.remove("done");
+        alert(err.message);
+      }
+    });
+  }
+
+  card.appendChild(row);
+
+  if (expandHtml) {
+    const expand = document.createElement("div");
+    expand.className = "feed-expand";
+    expand.innerHTML = expandHtml;
+    card.appendChild(expand);
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".checkbox")) return;
+      card.classList.toggle("open");
+    });
+  }
+
+  return card;
+}
+
+async function loadDashboard() {
+  renderDigestHeader();
+  const feed = document.getElementById("digest-feed");
+  feed.innerHTML = "";
+
+  const [bills, subscriptions, maintenance, decisions] = await Promise.all([
+    api("/api/bills").catch(() => []),
+    api("/api/subscriptions").catch(() => []),
+    api("/api/maintenance").catch(() => []),
+    api("/api/decisions").catch(() => []),
+  ]);
+
+  const today = todayStr();
+
+  const dueBills = bills.filter((b) => !b.paid && b.due_date <= today);
+  const dueSubs = subscriptions.filter((s) => s.active && s.renewal_date <= today);
+  const dueMaintenance = maintenance.filter((m) => m.next_due && m.next_due <= today);
+  const openDecisions = decisions.filter((d) => d.status === "open");
+
+  const dueCount = dueBills.length + dueSubs.length + dueMaintenance.length;
+  const needCount = dueCount + openDecisions.length;
+  document.getElementById("digest-sub").textContent =
+    needCount === 0
+      ? "Nothing needs you today — enjoy the calm."
+      : `${needCount} thing${needCount === 1 ? "" : "s"} need${needCount === 1 ? "s" : ""} you today.`;
+
+  if (dueCount > 0) {
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = "Due today";
+    feed.appendChild(label);
+
+    for (const bill of dueBills) {
+      const overdue = bill.due_date < today;
+      feed.appendChild(buildFeedCard({
+        icon: "💡", iconClass: "bill",
+        title: bill.name,
+        meta: `${fmtMoney(bill.amount)} · ${overdue ? "overdue" : "due today"}`,
+        urgent: true,
+        checkbox: true,
+        onCheck: async () => {
+          await api(`/api/bills/${bill.id}/mark-paid`, "POST");
+          showToast("Marked as paid");
+        },
+      }));
+    }
+
+    for (const item of dueMaintenance) {
+      const overdue = item.next_due < today;
+      feed.appendChild(buildFeedCard({
+        icon: "🔧", iconClass: "maintenance",
+        title: item.task,
+        meta: `${item.property_or_appliance} · ${overdue ? "overdue" : "due today"}`,
+        urgent: overdue,
+        checkbox: true,
+        onCheck: async () => {
+          await api(`/api/maintenance/${item.id}/mark-done`, "POST");
+          showToast("Marked done");
+        },
+      }));
+    }
+
+    for (const sub of dueSubs) {
+      feed.appendChild(buildFeedCard({
+        icon: "🔁", iconClass: "subscription",
+        title: sub.name,
+        meta: `${fmtMoney(sub.cost)}/${sub.billing_cycle} · renews today`,
+        checkbox: true,
+        onCheck: async () => {
+          await api(`/api/subscriptions/${sub.id}/renew`, "POST");
+          showToast("Renewed");
+        },
+      }));
+    }
+  }
+
+  const status = await api("/api/calendar/status").catch(() => null);
+  if (status && status.configured && status.connected) {
+    const events = await api("/api/calendar/events").catch(() => []);
+    const todaysEvents = events.filter((e) => {
+      const d = new Date(e.start_time);
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` === today;
+    });
+    if (todaysEvents.length > 0) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Today's calendar";
+      feed.appendChild(label);
+
+      for (const event of todaysEvents) {
+        const start = new Date(event.start_time);
+        const end = new Date(event.end_time);
+        const time = event.all_day
+          ? "All day"
+          : `${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` +
+            ` – ${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+        const details = [event.description, event.location].filter(Boolean).map(escapeHtml).join(" · ");
+        feed.appendChild(buildFeedCard({
+          icon: "📅", iconClass: "calendar",
+          title: event.title,
+          meta: time + (event.location ? ` · ${event.location}` : ""),
+          expandHtml: details ? `<p>${details}</p>` : `<p>No further details.</p>`,
+        }));
+      }
+    }
+  }
+
+  if (openDecisions.length > 0) {
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = "Family decisions";
+    feed.appendChild(label);
+
+    for (const decision of openDecisions) {
+      feed.appendChild(buildFeedCard({
+        icon: "🗳️", iconClass: "decision",
+        title: decision.item,
+        meta: "Open — awaiting a decision",
+        expandHtml: `<p>${decision.notes ? escapeHtml(decision.notes) : "No notes yet. Head to Browse → Decisions to resolve it."}</p>`,
+      }));
+    }
+  }
+
+  const stubLabel = document.createElement("div");
+  stubLabel.className = "section-label";
+  stubLabel.textContent = "Coming soon";
+  feed.appendChild(stubLabel);
+
+  const mealCard = buildFeedCard({
+    icon: "🍲", iconClass: "stub",
+    title: "Meal plan",
+    meta: "Not connected yet",
+  });
+  mealCard.classList.add("stub-card");
+  mealCard.querySelector(".card-title").insertAdjacentHTML(
+    "beforebegin", '<span class="stub-pill">stub</span>'
+  );
+  feed.appendChild(mealCard);
+
+  const securityCard = buildFeedCard({
+    icon: "🔒", iconClass: "stub",
+    title: "Home security",
+    meta: "Not connected yet",
+  });
+  securityCard.classList.add("stub-card");
+  securityCard.querySelector(".card-title").insertAdjacentHTML(
+    "beforebegin", '<span class="stub-pill">stub</span>'
+  );
+  feed.appendChild(securityCard);
+
+  if (dueCount === 0 && openDecisions.length === 0 && feed.querySelectorAll(".feed-card").length === 2) {
+    const empty = document.createElement("p");
+    empty.className = "feed-empty";
+    empty.textContent = "Nothing due, nothing waiting on you.";
+    feed.insertBefore(empty, stubLabel);
+  }
+}
+
+const composerInput = document.getElementById("composer-input");
+const composerSend = document.getElementById("composer-send");
+
+function sendComposer() {
+  const value = composerInput.value.trim();
+  if (!value) return;
+  showToast("Quick-add isn't wired up yet — coming in a later phase.");
+  composerInput.value = "";
+}
+
+composerSend.addEventListener("click", sendComposer);
+composerInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendComposer();
+});

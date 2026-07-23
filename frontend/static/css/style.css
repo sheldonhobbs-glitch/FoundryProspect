@@ -1,12 +1,20 @@
 :root {
-  --bg: #fbf6f2;
-  --surface: #ffffff;
-  --text: #2a2320;
-  --muted: #8a7d75;
-  --accent: #e8734a;
-  --accent-dark: #c85a34;
-  --border: #ece2db;
-  --error: #c0392b;
+  --ink: #22303C;
+  --ink-soft: #4A5A66;
+  --bg: #F0EFEA;
+  --surface: #FFFFFF;
+  --text: #22303C;
+  --muted: #4A5A66;
+  --accent: #C98A3E;
+  --accent-dark: #A8722F;
+  --accent-soft: #F3E3CB;
+  --sage: #7C9885;
+  --sage-soft: #E3EAE4;
+  --coral: #C1584B;
+  --coral-soft: #F5DEDA;
+  --border: #DEDBD3;
+  --error: #C1584B;
+  --done: #B7BDB6;
 }
 
 * {
@@ -19,9 +27,10 @@ html, body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Work Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
 #app {
@@ -83,29 +92,78 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg);
   flex-shrink: 0;
 }
 
-.brand {
-  font-weight: 700;
-  font-size: 18px;
+.brand-btn {
+  font-weight: 600;
+  font-size: 16px;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .link-btn {
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
   cursor: pointer;
+  padding: 0;
+}
+
+.link-btn:hover {
+  color: var(--accent-dark);
 }
 
 #content-area {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 16px 16px 4px;
+  scrollbar-width: none;
+}
+#content-area::-webkit-scrollbar { display: none; }
+
+/* --- Digest header --- */
+.digest-header {
+  padding: 4px 4px 8px;
+}
+
+.digest-date {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.digest-header h1 {
+  font-family: 'Newsreader', serif;
+  font-weight: 500;
+  font-style: italic;
+  font-size: 30px;
+  margin: 4px 0 0;
+  color: var(--ink);
+}
+
+.digest-sub {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  margin: 6px 0 0;
+  line-height: 1.4;
 }
 
 .bubble {
@@ -117,8 +175,8 @@ body {
 }
 
 .bubble.system {
-  background: #fdece3;
-  border-color: #f6cdb8;
+  background: var(--accent-soft);
+  border-color: #e9cda0;
 }
 
 .notification-bubble {
@@ -139,12 +197,162 @@ body {
   cursor: pointer;
 }
 
-/* --- Home view: section tiles --- */
+/* --- Digest feed: section labels + feed cards --- */
+.section-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 18px 4px 8px;
+}
+.section-label:first-child {
+  margin-top: 4px;
+}
+
+.feed-card {
+  background: var(--surface);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.feed-card:active {
+  transform: scale(0.98);
+}
+.feed-card.static {
+  cursor: default;
+}
+
+.feed-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.icon-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.icon-badge.bill { background: var(--coral-soft); }
+.icon-badge.maintenance { background: var(--coral-soft); }
+.icon-badge.subscription { background: var(--coral-soft); }
+.icon-badge.calendar { background: var(--sage-soft); }
+.icon-badge.decision { background: var(--sage-soft); }
+.icon-badge.stub { background: #E9E9E6; }
+
+.feed-card .card-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.feed-card .card-meta {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.feed-card .card-meta.urgent {
+  color: var(--coral);
+  font-weight: 500;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.checkbox.checked {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+.checkbox.checked::after {
+  content: '✓';
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.feed-card.done .card-title {
+  color: var(--done);
+  text-decoration: line-through;
+}
+.feed-card.done .card-meta {
+  color: var(--done);
+}
+.feed-card.done {
+  background: #F7F6F3;
+}
+
+.feed-expand {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.feed-card.open .feed-expand {
+  max-height: 240px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.feed-expand p {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.stub-card {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.stub-card .card-meta {
+  font-style: italic;
+}
+.stub-pill {
+  float: right;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: #E9E9E6;
+  color: var(--ink-soft);
+  padding: 3px 7px;
+  border-radius: 20px;
+}
+
+.feed-empty {
+  color: var(--muted);
+  font-size: 13.5px;
+  padding: 4px 4px 20px;
+}
+
+/* --- Browse view: section tiles --- */
+.browse-title {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 24px;
+  margin: 4px 4px 14px;
+}
+
 #section-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
-  margin-top: 8px;
 }
 
 .section-tile {
@@ -165,7 +373,7 @@ body {
 }
 
 .tile-label {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 15px;
 }
 
@@ -178,24 +386,28 @@ body {
 #back-btn {
   background: none;
   border: none;
-  color: var(--accent);
-  font-size: 15px;
+  color: var(--accent-dark);
+  font-size: 14.5px;
   font-weight: 600;
   padding: 0 0 12px;
   cursor: pointer;
 }
 
 #detail-title {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-weight: 500;
   margin: 0 0 12px;
-  font-size: 20px;
+  font-size: 22px;
 }
 
 .day-header {
-  font-weight: 700;
-  font-size: 13px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+  font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   margin: 16px 0 6px;
 }
 
@@ -211,8 +423,8 @@ body {
 
 .resource-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
   margin-bottom: 8px;
   background: var(--surface);
   font-size: 14px;
@@ -255,7 +467,7 @@ body {
 
 .add-btn:hover {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-dark);
 }
 
 .resource-form {
@@ -296,4 +508,75 @@ body {
 
 .resource-form .danger-btn {
   background: var(--error);
+}
+
+/* --- Composer bar (home/digest view only) --- */
+.composer {
+  flex-shrink: 0;
+  padding: 10px 16px 16px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+.composer[hidden] {
+  display: none;
+}
+
+.composer-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 6px 6px 6px 16px;
+}
+
+.composer-inner input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: 'Work Sans', sans-serif;
+  font-size: 13.5px;
+  background: transparent;
+  color: var(--text);
+}
+.composer-inner input::placeholder {
+  color: var(--done);
+}
+
+.send-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* --- Toast --- */
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 12.5px;
+  padding: 9px 16px;
+  border-radius: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  z-index: 10;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
