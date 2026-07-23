@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from db.models import BillingCycle, DecisionStatus, Recurrence, RecurrenceUnit
+from db.models import BillingCycle, CashflowKind, DecisionStatus, Recurrence, RecurrenceUnit
 
 
 def _assume_utc_if_naive(v: datetime | None) -> datetime | None:
@@ -116,9 +116,11 @@ class MaintenanceItemRead(MaintenanceItemBase):
 
 class WarrantyBase(BaseModel):
     item: str
+    retailer: str | None = None
     purchase_date: date
     expiry_date: date
     document_reference: str | None = None
+    receipt_id: int | None = None
     notes: str | None = None
 
 
@@ -128,9 +130,11 @@ class WarrantyCreate(WarrantyBase):
 
 class WarrantyUpdate(BaseModel):
     item: str | None = None
+    retailer: str | None = None
     purchase_date: date | None = None
     expiry_date: date | None = None
     document_reference: str | None = None
+    receipt_id: int | None = None
     notes: str | None = None
 
 
@@ -140,6 +144,52 @@ class WarrantyRead(WarrantyBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+
+class ReceiptBase(BaseModel):
+    vendor: str
+    amount: Decimal
+    purchased_at: date
+    category: str
+    notes: str | None = None
+
+
+class ReceiptCreate(ReceiptBase):
+    pass
+
+
+class ReceiptUpdate(BaseModel):
+    vendor: str | None = None
+    amount: Decimal | None = None
+    purchased_at: date | None = None
+    category: str | None = None
+    notes: str | None = None
+
+
+class ReceiptRead(ReceiptBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CashflowEntryBase(BaseModel):
+    kind: CashflowKind
+    amount: Decimal
+    entry_date: date
+    note: str | None = None
+
+
+class CashflowEntryCreate(CashflowEntryBase):
+    pass
+
+
+class CashflowEntryRead(CashflowEntryBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
 
 
 class NotificationRead(BaseModel):

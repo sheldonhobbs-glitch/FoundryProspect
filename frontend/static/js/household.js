@@ -131,28 +131,6 @@ const RESOURCES = {
       return items.length === 0 ? "" : `${items.length} item${items.length === 1 ? "" : "s"}`;
     },
   },
-  warranties: {
-    label: "Warranties",
-    endpoint: "/api/warranties",
-    fields: [
-      { name: "item", label: "Item", type: "text", required: true },
-      { name: "purchase_date", label: "Purchase date", type: "date", required: true },
-      { name: "expiry_date", label: "Expiry date", type: "date", required: true },
-      { name: "document_reference", label: "Document reference (optional)", type: "text" },
-      { name: "notes", label: "Notes", type: "textarea" },
-    ],
-    renderCard(item) {
-      const doc = item.document_reference ? ` · doc: ${escapeHtml(item.document_reference)}` : "";
-      return `<strong>${escapeHtml(item.item)}</strong><br>
-        purchased ${item.purchase_date} · expires ${item.expiry_date}${doc}`;
-    },
-    actions() {
-      return [];
-    },
-    count(items) {
-      return items.length === 0 ? "" : `${items.length} item${items.length === 1 ? "" : "s"}`;
-    },
-  },
 };
 
 async function api(path, method = "GET", body) {
@@ -1120,6 +1098,478 @@ async function openDecisions() {
 
   await refresh();
 }
+
+// --- Financial: manual cashflow, receipts, warranties (with expiry
+// tracking). No bank feed — everything here is typed in or (later) scanned. ---
+
+function addDaysStr(dateStr, days) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function buildQuickAction(icon, label) {
+  const btn = document.createElement("div");
+  btn.className = "qa-btn";
+  btn.innerHTML = `<div class="qa-icon">${icon}</div><div class="qa-label">${escapeHtml(label)}</div>`;
+  return btn;
+}
+
+function buildSummaryTag(value, label) {
+  const tag = document.createElement("div");
+  tag.className = "summary-tag";
+  tag.innerHTML = `<div class="t-label">${escapeHtml(label)}</div><div class="t-val">${value}</div>`;
+  return tag;
+}
+
+async function renderFinancialSummary(container, view, onViewChange) {
+  const summary = await api(`/api/financial/summary?view=${view}`).catch(() => null);
+  container.innerHTML = "";
+  if (!summary) {
+    container.innerHTML = '<p class="muted">Could not load the financial summary.</p>';
+    return;
+  }
+
+  const top = document.createElement("div");
+  top.className = "summary-top";
+  const label = document.createElement("div");
+  label.className = "s-label";
+  label.textContent = "Cashflow";
+  const toggle = document.createElement("div");
+  toggle.className = "view-toggle";
+  const monthlyBtn = document.createElement("button");
+  monthlyBtn.type = "button";
+  monthlyBtn.textContent = "This month";
+  monthlyBtn.className = view === "monthly" ? "active" : "";
+  monthlyBtn.addEventListener("click", () => onViewChange("monthly"));
+  const allBtn = document.createElement("button");
+  allBtn.type = "button";
+  allBtn.textContent = "All time";
+  allBtn.className = view === "alltime" ? "active" : "";
+  allBtn.addEventListener("click", () => onViewChange("alltime"));
+  toggle.appendChild(monthlyBtn);
+  toggle.appendChild(allBtn);
+  top.appendChild(label);
+  top.appendChild(toggle);
+  container.appendChild(top);
+
+  const positive = summary.net >= 0;
+  const amount = document.createElement("div");
+  amount.className = "s-amount " + (positive ? "positive" : "negative");
+  amount.textContent = (positive ? "" : "− ") + fmtMoney(Math.abs(summary.net));
+  container.appendChild(amount);
+
+  const note = document.createElement("div");
+  note.className = "s-note";
+  const period = view === "monthly" ? "this month" : "since tracking began";
+  note.textContent = `${fmtMoney(summary.income)} in vs ${fmtMoney(summary.expenses)} out ${period}` +
+    (positive ? " — you're ahead." : " — you've drawn down.");
+  container.appendChild(note);
+
+  const importLink = document.createElement("div");
+  importLink.className = "import-income-link";
+  importLink.textContent = "📥 Import income (CSV)";
+  importLink.addEventListener("click", () => showToast("CSV import isn't wired up yet — coming in a later phase."));
+  container.appendChild(importLink);
+
+  const tagsRow = document.createElement("div");
+  tagsRow.className = "summary-tags";
+  tagsRow.appendChild(buildSummaryTag(summary.receipts_count, "Receipts"));
+  tagsRow.appendChild(buildSummaryTag(summary.warranties_count, "Warranties"));
+  tagsRow.appendChild(buildSummaryTag(summary.warranties_expiring_count, "Expiring"));
+  container.appendChild(tagsRow);
+}
+
+function buildReceiptForm(existing, onDone) {
+  const form = document.createElement("form");
+  form.className = "resource-form";
+  const fields = [
+    { name: "vendor", label: "Vendor", type: "text", required: true },
+    { name: "amount", label: "Amount", type: "number", step: "0.01", required: true },
+    { name: "purchased_at", label: "Date", type: "date", required: true },
+    { name: "category", label: "Category", type: "combo", required: true },
+    { name: "notes", label: "Notes (optional)", type: "textarea" },
+  ];
+  for (const field of fields) {
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    form.appendChild(label);
+    let input;
+    if (field.type === "textarea") {
+      input = document.createElement("textarea");
+    } else if (field.type === "combo") {
+      input = document.createElement("input");
+      input.type = "text";
+      input.setAttribute("list", "category-options");
+    } else {
+      input = document.createElement("input");
+      input.type = field.type;
+      if (field.step) input.step = field.step;
+    }
+    input.name = field.name;
+    if (field.required) input.required = true;
+    input.value = existing ? existing[field.name] ?? "" : "";
+    form.appendChild(input);
+  }
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.textContent = existing ? "Save changes" : "Save receipt";
+  form.appendChild(submitBtn);
+
+  if (existing) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "danger-btn";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete this receipt from ${existing.vendor}?`)) return;
+      await api(`/api/financial/receipts/${existing.id}`, "DELETE");
+      onDone();
+    });
+    form.appendChild(deleteBtn);
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (data.notes === "") data.notes = null;
+    try {
+      if (existing) {
+        await api(`/api/financial/receipts/${existing.id}`, "PATCH", data);
+      } else {
+        await api("/api/financial/receipts", "POST", data);
+      }
+      onDone();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  return form;
+}
+
+async function buildWarrantyForm(existing, onDone) {
+  const form = document.createElement("form");
+  form.className = "resource-form";
+  const fields = [
+    { name: "item", label: "Item", type: "text", required: true },
+    { name: "retailer", label: "Retailer (optional)", type: "text" },
+    { name: "purchase_date", label: "Purchase date", type: "date", required: true },
+    { name: "expiry_date", label: "Expiry date", type: "date", required: true },
+    { name: "document_reference", label: "Document reference (optional)", type: "text" },
+    { name: "notes", label: "Notes (optional)", type: "textarea" },
+  ];
+  for (const field of fields) {
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    form.appendChild(label);
+    const input = document.createElement(field.type === "textarea" ? "textarea" : "input");
+    if (field.type !== "textarea") input.type = field.type;
+    input.name = field.name;
+    if (field.required) input.required = true;
+    input.value = existing ? existing[field.name] ?? "" : "";
+    form.appendChild(input);
+  }
+
+  const receiptLabel = document.createElement("label");
+  receiptLabel.textContent = "Link a receipt (optional) — proof of purchase";
+  form.appendChild(receiptLabel);
+  const receiptSelect = document.createElement("select");
+  receiptSelect.name = "receipt_id";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "— none —";
+  receiptSelect.appendChild(noneOpt);
+  const receipts = await api("/api/financial/receipts").catch(() => []);
+  for (const r of receipts) {
+    const opt = document.createElement("option");
+    opt.value = String(r.id);
+    opt.textContent = `${r.vendor} — ${fmtMoney(r.amount)} (${r.purchased_at})`;
+    if (existing && existing.receipt_id === r.id) opt.selected = true;
+    receiptSelect.appendChild(opt);
+  }
+  form.appendChild(receiptSelect);
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.textContent = existing ? "Save changes" : "Save warranty";
+  form.appendChild(submitBtn);
+
+  if (existing) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "danger-btn";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete "${existing.item}"?`)) return;
+      await api(`/api/warranties/${existing.id}`, "DELETE");
+      onDone();
+    });
+    form.appendChild(deleteBtn);
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form).entries());
+    for (const key of Object.keys(data)) {
+      if (data[key] === "") data[key] = null;
+    }
+    if (data.receipt_id) data.receipt_id = Number(data.receipt_id);
+    try {
+      if (existing) {
+        await api(`/api/warranties/${existing.id}`, "PATCH", data);
+      } else {
+        await api("/api/warranties", "POST", data);
+      }
+      onDone();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  return form;
+}
+
+function buildCashflowForm(onDone) {
+  const form = document.createElement("form");
+  form.className = "resource-form";
+  let selectedKind = "income";
+
+  const kindLabel = document.createElement("label");
+  kindLabel.textContent = "Type";
+  form.appendChild(kindLabel);
+  const toggleRow = document.createElement("div");
+  toggleRow.className = "toggle-row";
+  for (const key of ["income", "expense"]) {
+    const chip = document.createElement("div");
+    chip.className = "toggle-chip" + (key === selectedKind ? " on" : "");
+    chip.textContent = key === "income" ? "Income" : "Expense";
+    chip.addEventListener("click", () => {
+      selectedKind = key;
+      toggleRow.querySelectorAll(".toggle-chip").forEach((c) => c.classList.remove("on"));
+      chip.classList.add("on");
+    });
+    toggleRow.appendChild(chip);
+  }
+  form.appendChild(toggleRow);
+
+  const fields = [
+    { name: "amount", label: "Amount", type: "number", step: "0.01", required: true },
+    { name: "entry_date", label: "Date", type: "date", required: true },
+    { name: "note", label: "Note (optional)", type: "text" },
+  ];
+  for (const field of fields) {
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    form.appendChild(label);
+    const input = document.createElement("input");
+    input.type = field.type;
+    if (field.step) input.step = field.step;
+    input.name = field.name;
+    if (field.required) input.required = true;
+    form.appendChild(input);
+  }
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.textContent = "Log entry";
+  form.appendChild(submitBtn);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+    const payload = {
+      kind: selectedKind,
+      amount: formData.get("amount"),
+      entry_date: formData.get("entry_date"),
+      note: formData.get("note") || null,
+    };
+    try {
+      await api("/api/financial/cashflow", "POST", payload);
+      onDone();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  return form;
+}
+
+async function openFinancial() {
+  showDetail("Financial");
+  let currentView = "monthly";
+
+  const summaryCard = document.createElement("div");
+  summaryCard.className = "summary-card";
+  detailBody.appendChild(summaryCard);
+
+  const quickActions = document.createElement("div");
+  quickActions.className = "quick-actions";
+  const qaReceipt = buildQuickAction("🧾", "Import receipt");
+  const qaWarranty = buildQuickAction("🛡️", "Add warranty");
+  const qaCashflow = buildQuickAction("💵", "Log income/expense");
+  quickActions.appendChild(qaReceipt);
+  quickActions.appendChild(qaWarranty);
+  quickActions.appendChild(qaCashflow);
+  detailBody.appendChild(quickActions);
+
+  const formSlot = document.createElement("div");
+  detailBody.appendChild(formSlot);
+
+  const receiptsLabel = document.createElement("div");
+  receiptsLabel.className = "section-label";
+  receiptsLabel.textContent = "Recent receipts";
+  detailBody.appendChild(receiptsLabel);
+  const receiptsList = document.createElement("div");
+  detailBody.appendChild(receiptsList);
+
+  const warrantiesLabel = document.createElement("div");
+  warrantiesLabel.className = "section-label";
+  warrantiesLabel.textContent = "Warranties";
+  detailBody.appendChild(warrantiesLabel);
+  const warrantiesList = document.createElement("div");
+  detailBody.appendChild(warrantiesList);
+
+  const importHint = document.createElement("p");
+  importHint.className = "muted";
+  importHint.style.textAlign = "center";
+  importHint.style.marginTop = "8px";
+  importHint.textContent = "Manual and CSV entry only — no live bank feed.";
+  detailBody.appendChild(importHint);
+
+  function clearFormSlot() {
+    formSlot.innerHTML = "";
+  }
+
+  async function refreshSummary() {
+    await renderFinancialSummary(summaryCard, currentView, (newView) => {
+      currentView = newView;
+      refreshSummary();
+    });
+  }
+
+  async function refreshReceipts() {
+    const receipts = await api("/api/financial/receipts");
+    receiptsList.innerHTML = "";
+    if (receipts.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No receipts yet.";
+      receiptsList.appendChild(empty);
+      return;
+    }
+    for (const r of receipts.slice(0, 10)) {
+      const card = document.createElement("div");
+      card.className = "resource-card";
+      card.innerHTML = `<strong>${escapeHtml(r.vendor)}</strong> — ${fmtMoney(r.amount)}<br>${r.purchased_at} · ${escapeHtml(r.category)}`;
+      const btnRow = document.createElement("div");
+      btnRow.className = "card-actions";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        const existingForm = card.querySelector("form");
+        if (existingForm) {
+          existingForm.remove();
+          return;
+        }
+        card.appendChild(buildReceiptForm(r, () => { refreshReceipts(); refreshSummary(); }));
+      });
+      btnRow.appendChild(editBtn);
+      card.appendChild(btnRow);
+      receiptsList.appendChild(card);
+    }
+  }
+
+  async function refreshWarranties() {
+    const warranties = await api("/api/warranties");
+    warrantiesList.innerHTML = "";
+    if (warranties.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No warranties yet.";
+      warrantiesList.appendChild(empty);
+      return;
+    }
+    const today = todayStr();
+    for (const w of warranties) {
+      const expiringSoon = w.expiry_date >= today && w.expiry_date <= addDaysStr(today, 30);
+      const card = document.createElement("div");
+      card.className = "resource-card";
+      const retailer = w.retailer ? ` · ${escapeHtml(w.retailer)}` : "";
+      const expiryLine = expiringSoon
+        ? `<span style="color: var(--coral); font-weight: 500;">Expires ${w.expiry_date}</span>`
+        : `Covered until ${w.expiry_date}`;
+      card.innerHTML = `<strong>${escapeHtml(w.item)}</strong>${retailer}<br>${expiryLine}`;
+      const btnRow = document.createElement("div");
+      btnRow.className = "card-actions";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", async () => {
+        const existingForm = card.querySelector("form");
+        if (existingForm) {
+          existingForm.remove();
+          return;
+        }
+        card.appendChild(await buildWarrantyForm(w, () => { refreshWarranties(); refreshSummary(); }));
+      });
+      btnRow.appendChild(editBtn);
+      card.appendChild(btnRow);
+      warrantiesList.appendChild(card);
+    }
+  }
+
+  qaReceipt.addEventListener("click", () => {
+    clearFormSlot();
+    const form = buildReceiptForm(null, () => {
+      clearFormSlot();
+      refreshReceipts();
+      refreshSummary();
+    });
+    formSlot.appendChild(form);
+  });
+
+  qaWarranty.addEventListener("click", async () => {
+    clearFormSlot();
+    const form = await buildWarrantyForm(null, () => {
+      clearFormSlot();
+      refreshWarranties();
+      refreshSummary();
+    });
+    formSlot.appendChild(form);
+  });
+
+  qaCashflow.addEventListener("click", () => {
+    clearFormSlot();
+    const form = buildCashflowForm(() => {
+      clearFormSlot();
+      refreshSummary();
+      showToast("Logged");
+    });
+    formSlot.appendChild(form);
+  });
+
+  await refreshSummary();
+  await refreshReceipts();
+  await refreshWarranties();
+}
+window.openFinancial = openFinancial;
+
+window.refreshFinancialCount = async function () {
+  const el = document.querySelector('[data-count-for="financial"]');
+  if (!el) return;
+  try {
+    const summary = await api("/api/financial/summary?view=monthly");
+    el.textContent = summary.warranties_expiring_count > 0
+      ? `${summary.warranties_expiring_count} expiring`
+      : `${fmtMoney(summary.net)} this month`;
+  } catch {
+    el.textContent = "";
+  }
+};
 
 async function loadNotifications() {
   notificationsList.innerHTML = "";

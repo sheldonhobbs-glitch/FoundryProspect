@@ -712,6 +712,118 @@ body {
 .opt-title { font-size: 13.5px; font-weight: 600; }
 .opt-voters { display: flex; gap: 6px; margin-top: 8px; }
 
+/* --- Financial: dark summary card + quick actions --- */
+.summary-card {
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 16px;
+  padding: 18px 20px;
+  margin-bottom: 10px;
+}
+.summary-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.summary-card .s-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9FB0BA;
+}
+.view-toggle {
+  display: flex;
+  background: rgba(240, 239, 234, 0.1);
+  border-radius: 20px;
+  padding: 3px;
+}
+.view-toggle button {
+  border: none;
+  background: transparent;
+  color: #9FB0BA;
+  font-size: 10.5px;
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.03em;
+  padding: 5px 10px;
+  border-radius: 16px;
+  cursor: pointer;
+}
+.view-toggle button.active {
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+.summary-card .s-amount {
+  font-family: 'Newsreader', serif;
+  font-size: 32px;
+  margin-top: 10px;
+}
+.summary-card .s-amount.positive { color: var(--sage); }
+.summary-card .s-amount.negative { color: #E38C82; }
+.summary-card .s-note {
+  font-size: 11.5px;
+  color: #9FB0BA;
+  margin-top: 8px;
+}
+.import-income-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: #9FB0BA;
+  cursor: pointer;
+}
+.summary-tags {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.summary-tag {
+  background: rgba(240, 239, 234, 0.1);
+  border-radius: 8px;
+  padding: 8px 10px;
+  flex: 1;
+}
+.summary-tag .t-label {
+  font-size: 9.5px;
+  color: #9FB0BA;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.summary-tag .t-val {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.qa-btn {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 10px;
+  text-align: center;
+  cursor: pointer;
+}
+.qa-btn:hover {
+  border-color: var(--accent);
+}
+.qa-btn .qa-icon {
+  font-size: 22px;
+}
+.qa-btn .qa-label {
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+
 /* --- Resource lists / cards / forms --- */
 .muted {
   color: var(--muted);
