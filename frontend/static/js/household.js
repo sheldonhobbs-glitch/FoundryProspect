@@ -1571,6 +1571,210 @@ window.refreshFinancialCount = async function () {
   }
 };
 
+// --- Meal planning: a week strip of planned meals, pantry contents, and
+// rule-based "what can I make" suggestions. The fridge-photo scan is a
+// stub — manual pantry entry is the real, functional path. ---
+
+function weekDatesForMeals() {
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    return d;
+  });
+}
+
+async function openMeals() {
+  showDetail("Meal planning");
+
+  const header = document.createElement("p");
+  header.className = "muted";
+  header.textContent = "Tap a day to set what's planned. Pantry contents drive the suggestions below.";
+  detailBody.appendChild(header);
+
+  const weekLabel = document.createElement("div");
+  weekLabel.className = "section-label";
+  weekLabel.textContent = "Week at a glance";
+  detailBody.appendChild(weekLabel);
+
+  const weekStrip = document.createElement("div");
+  weekStrip.className = "week-strip";
+  detailBody.appendChild(weekStrip);
+
+  const planForm = document.createElement("div");
+  planForm.className = "resource-form";
+  const planLabel = document.createElement("label");
+  planLabel.id = "plan-form-label";
+  planForm.appendChild(planLabel);
+  const planInput = document.createElement("input");
+  planInput.type = "text";
+  planInput.placeholder = "e.g. Chicken stir-fry";
+  planForm.appendChild(planInput);
+  const planSaveBtn = document.createElement("button");
+  planSaveBtn.type = "button";
+  planSaveBtn.textContent = "Save";
+  planForm.appendChild(planSaveBtn);
+  detailBody.appendChild(planForm);
+
+  const scanCta = document.createElement("div");
+  scanCta.className = "scan-cta";
+  scanCta.innerHTML = `<div class="icon">📷</div><div><div class="txt-title">Scan the fridge</div><div class="txt-sub">Snap a photo, Ember reads what's in there</div></div>`;
+  scanCta.addEventListener("click", () => showToast("Camera scan isn't wired up yet — coming in a later phase."));
+  detailBody.appendChild(scanCta);
+
+  const pantryLabel = document.createElement("div");
+  pantryLabel.className = "section-label";
+  pantryLabel.textContent = "Pantry";
+  detailBody.appendChild(pantryLabel);
+
+  const pantryChips = document.createElement("div");
+  pantryChips.className = "pantry-chips";
+  detailBody.appendChild(pantryChips);
+
+  const addPantryForm = document.createElement("div");
+  addPantryForm.className = "resource-form";
+  const addPantryInput = document.createElement("input");
+  addPantryInput.type = "text";
+  addPantryInput.placeholder = "Add a pantry item (e.g. Soy sauce)";
+  addPantryForm.appendChild(addPantryInput);
+  const addPantryBtn = document.createElement("button");
+  addPantryBtn.type = "button";
+  addPantryBtn.textContent = "Add";
+  addPantryForm.appendChild(addPantryBtn);
+  detailBody.appendChild(addPantryForm);
+
+  const suggestLabel = document.createElement("div");
+  suggestLabel.className = "section-label";
+  suggestLabel.textContent = "Suggested with what you've got";
+  detailBody.appendChild(suggestLabel);
+
+  const suggestList = document.createElement("div");
+  detailBody.appendChild(suggestList);
+
+  const weekDates = weekDatesForMeals();
+  let selectedDate = dateKey(weekDates[0]);
+  let planByDate = {};
+
+  function selectDay(key) {
+    selectedDate = key;
+    const d = weekDates.find((wd) => dateKey(wd) === key);
+    planLabel.textContent = `Meal for ${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`;
+    planInput.value = planByDate[key] ? planByDate[key].meal_text : "";
+    weekStrip.querySelectorAll(".day-chip").forEach((chip) => {
+      chip.classList.toggle("today", chip.dataset.key === key);
+    });
+  }
+
+  async function refreshPlan() {
+    const entries = await api("/api/meals/plan").catch(() => []);
+    planByDate = {};
+    for (const entry of entries) planByDate[entry.plan_date] = entry;
+
+    weekStrip.innerHTML = "";
+    for (const d of weekDates) {
+      const key = dateKey(d);
+      const chip = document.createElement("div");
+      chip.className = "day-chip" + (key === selectedDate ? " today" : "");
+      chip.dataset.key = key;
+      const mealText = planByDate[key] ? planByDate[key].meal_text : "Not set";
+      chip.innerHTML = `<div class="d-name">${d.toLocaleDateString(undefined, { weekday: "short" })}</div><div class="d-meal">${escapeHtml(mealText)}</div>`;
+      chip.addEventListener("click", () => selectDay(key));
+      weekStrip.appendChild(chip);
+    }
+    selectDay(selectedDate);
+  }
+
+  planSaveBtn.addEventListener("click", async () => {
+    const mealText = planInput.value.trim();
+    if (!mealText) return;
+    try {
+      await api("/api/meals/plan", "POST", { plan_date: selectedDate, meal_text: mealText });
+      await refreshPlan();
+      showToast("Meal plan updated");
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  async function refreshPantry() {
+    const items = await api("/api/meals/pantry").catch(() => []);
+    pantryChips.innerHTML = "";
+    if (items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No pantry items yet — add what you've got below.";
+      pantryChips.appendChild(empty);
+    }
+    for (const item of items) {
+      const chip = document.createElement("span");
+      chip.className = "p-chip" + (item.low_stock ? " low" : "");
+      chip.textContent = item.low_stock ? `${item.name} · low` : item.name;
+      chip.title = "Tap to toggle low-stock, or ctrl-click to remove";
+      chip.addEventListener("click", async (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          await api(`/api/meals/pantry/${item.id}`, "DELETE");
+        } else {
+          await api(`/api/meals/pantry/${item.id}`, "PATCH", { low_stock: !item.low_stock });
+        }
+        refreshPantry();
+        refreshSuggestions();
+      });
+      pantryChips.appendChild(chip);
+    }
+  }
+
+  addPantryBtn.addEventListener("click", async () => {
+    const name = addPantryInput.value.trim();
+    if (!name) return;
+    await api("/api/meals/pantry", "POST", { name });
+    addPantryInput.value = "";
+    refreshPantry();
+    refreshSuggestions();
+  });
+  addPantryInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addPantryBtn.click();
+  });
+
+  async function refreshSuggestions() {
+    const suggestions = await api("/api/meals/suggestions").catch(() => []);
+    suggestList.innerHTML = "";
+    if (suggestions.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "Add a few pantry items to see suggestions.";
+      suggestList.appendChild(empty);
+      return;
+    }
+    for (const s of suggestions) {
+      const row = document.createElement("div");
+      row.className = "meal-suggest";
+      const sub = s.missing.length === 0
+        ? "Uses what's in your pantry — no shopping needed"
+        : `Missing: ${s.missing.join(", ")}`;
+      row.innerHTML = `<div class="icon-badge meal">${s.icon}</div><div><div class="ms-title">${escapeHtml(s.title)}</div><div class="ms-sub">${escapeHtml(sub)}</div></div>`;
+      suggestList.appendChild(row);
+    }
+  }
+
+  await refreshPlan();
+  await refreshPantry();
+  await refreshSuggestions();
+}
+window.openMeals = openMeals;
+
+window.refreshMealsCount = async function () {
+  const el = document.querySelector('[data-count-for="meals"]');
+  if (!el) return;
+  try {
+    const entries = await api("/api/meals/plan");
+    const weekDates = weekDatesForMeals();
+    const planned = weekDates.filter((d) => entries.some((e) => e.plan_date === dateKey(d))).length;
+    el.textContent = `${planned}/7 days planned`;
+  } catch {
+    el.textContent = "";
+  }
+};
+
 async function loadNotifications() {
   notificationsList.innerHTML = "";
   const notifications = await api("/api/notifications").catch(() => []);
@@ -1803,21 +2007,22 @@ async function loadDashboard() {
     }
   }
 
+  const mealEntries = await api("/api/meals/plan").catch(() => []);
+  const todaysMeal = mealEntries.find((e) => e.plan_date === today);
+  const mealLabel = document.createElement("div");
+  mealLabel.className = "section-label";
+  mealLabel.textContent = "Today's meal";
+  feed.appendChild(mealLabel);
+  feed.appendChild(buildFeedCard({
+    icon: "🍲", iconClass: "meal",
+    title: todaysMeal ? todaysMeal.meal_text : "Nothing planned yet",
+    meta: todaysMeal ? "Planned for today" : "Head to Browse → Meal planning to set one",
+  }));
+
   const stubLabel = document.createElement("div");
   stubLabel.className = "section-label";
   stubLabel.textContent = "Coming soon";
   feed.appendChild(stubLabel);
-
-  const mealCard = buildFeedCard({
-    icon: "🍲", iconClass: "stub",
-    title: "Meal plan",
-    meta: "Not connected yet",
-  });
-  mealCard.classList.add("stub-card");
-  mealCard.querySelector(".card-title").insertAdjacentHTML(
-    "beforebegin", '<span class="stub-pill">stub</span>'
-  );
-  feed.appendChild(mealCard);
 
   const securityCard = buildFeedCard({
     icon: "🔒", iconClass: "stub",

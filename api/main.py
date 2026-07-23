@@ -16,6 +16,7 @@ from api.routes import decisions as decisions_routes
 from api.routes import financial as financial_routes
 from api.routes import health as health_routes
 from api.routes import maintenance as maintenance_routes
+from api.routes import meals as meals_routes
 from api.routes import notifications as notifications_routes
 from api.routes import subscriptions as subscriptions_routes
 from api.routes import warranties as warranties_routes
@@ -50,6 +51,7 @@ app.include_router(notifications_routes.router, prefix="/api")
 app.include_router(calendar_routes.router, prefix="/api")
 app.include_router(decisions_routes.router, prefix="/api")
 app.include_router(financial_routes.router, prefix="/api")
+app.include_router(meals_routes.router, prefix="/api")
 
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 

@@ -824,6 +824,89 @@ body {
   margin-top: 6px;
 }
 
+/* --- Meal planning: week strip, pantry chips, scan CTA, suggestions --- */
+.week-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 12px;
+}
+.day-chip {
+  flex-shrink: 0;
+  width: 84px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+}
+.day-chip .d-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.day-chip .d-meal {
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 4px;
+  line-height: 1.3;
+}
+.day-chip.today {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.scan-cta {
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 16px;
+  padding: 18px;
+  margin: 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+}
+.scan-cta .icon { font-size: 26px; }
+.scan-cta .txt-title { font-size: 15px; font-weight: 600; }
+.scan-cta .txt-sub { font-size: 12px; color: #B9C2C9; margin-top: 2px; }
+
+.pantry-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.p-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.p-chip.low {
+  border-color: var(--coral);
+  color: var(--coral);
+}
+
+.meal-suggest {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.icon-badge.meal { background: var(--accent-soft); }
+.meal-suggest .ms-title { font-size: 13.5px; font-weight: 500; }
+.meal-suggest .ms-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
 /* --- Resource lists / cards / forms --- */
 .muted {
   color: var(--muted);

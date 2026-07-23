@@ -192,6 +192,51 @@ class CashflowEntryRead(CashflowEntryBase):
     created_at: datetime
 
 
+class PantryItemBase(BaseModel):
+    name: str
+    low_stock: bool = False
+
+
+class PantryItemCreate(PantryItemBase):
+    pass
+
+
+class PantryItemUpdate(BaseModel):
+    name: str | None = None
+    low_stock: bool | None = None
+
+
+class PantryItemRead(PantryItemBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class MealPlanEntryBase(BaseModel):
+    plan_date: date
+    meal_text: str
+
+
+class MealPlanEntryCreate(MealPlanEntryBase):
+    pass
+
+
+class MealPlanEntryRead(MealPlanEntryBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class MealSuggestion(BaseModel):
+    title: str
+    icon: str
+    missing: list[str]
+
+
 class NotificationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
