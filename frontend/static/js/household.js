@@ -728,7 +728,7 @@ async function openCalendar() {
   toolbarRow.appendChild(disconnectBtn);
   detailBody.appendChild(toolbarRow);
 
-  const today = new Date();
+  const today = householdTodayDate();
   const weekDays = getWeekDays(today);
   let selectedDay = dateKey(today);
 
@@ -801,7 +801,7 @@ async function openCalendar() {
     const d = weekDays.find((wd) => dateKey(wd) === selectedDay) || today;
     dayLabel.textContent = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
-    const dayEvents = allEvents.filter((e) => dateKey(new Date(e.start_time)) === selectedDay);
+    const dayEvents = allEvents.filter((e) => householdDateOf(e.start_time) === selectedDay);
     listEl.innerHTML = "";
     if (dayEvents.length === 0) {
       const empty = document.createElement("p");
@@ -1576,7 +1576,7 @@ window.refreshFinancialCount = async function () {
 // stub — manual pantry entry is the real, functional path. ---
 
 function weekDatesForMeals() {
-  const today = new Date();
+  const today = householdTodayDate();
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
@@ -1809,18 +1809,44 @@ function showToast(message) {
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2200);
 }
 
+// "Today" is the household's, not the device's: a phone or laptop set to
+// another time zone must still agree with Ember's server.
+let householdTz;
+
+async function loadHouseholdClock() {
+  try {
+    householdTz = (await api("/api/today")).timezone;
+  } catch {
+    householdTz = undefined; // falls back to the device's time zone
+  }
+}
+
+function householdDateOf(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: householdTz, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(d);
+}
+
 function todayStr() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return householdDateOf(new Date());
+}
+
+// A Date whose local calendar fields are the household's date (midday, so
+// adding days never trips over daylight-saving changes).
+function householdTodayDate() {
+  const [y, m, d] = todayStr().split("-").map(Number);
+  return new Date(y, m - 1, d, 12);
 }
 
 function renderDigestHeader() {
-  const today = new Date();
-  document.getElementById("digest-date").textContent = today.toLocaleDateString(undefined, {
-    weekday: "long", day: "numeric", month: "long",
+  const now = new Date();
+  document.getElementById("digest-date").textContent = now.toLocaleDateString(undefined, {
+    weekday: "long", day: "numeric", month: "long", timeZone: householdTz,
   });
-  const hour = today.getHours();
+  const hour = Number(new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric", hourCycle: "h23", timeZone: householdTz,
+  }).format(now));
   const greeting = hour < 12 ? "Morning." : hour < 18 ? "Afternoon." : "Evening.";
   document.getElementById("digest-greeting").textContent = greeting;
 }
@@ -1884,15 +1910,18 @@ function buildFeedCard({ icon, iconClass, title, meta, urgent, checkbox, onCheck
 }
 
 async function loadDashboard() {
+  await loadHouseholdClock();
   renderDigestHeader();
   const feed = document.getElementById("digest-feed");
   feed.innerHTML = "";
 
-  const [bills, subscriptions, maintenance, decisions] = await Promise.all([
+  const [bills, subscriptions, maintenance, decisions, dueReminders, shoppingItems] = await Promise.all([
     api("/api/bills").catch(() => []),
     api("/api/subscriptions").catch(() => []),
     api("/api/maintenance").catch(() => []),
     api("/api/decisions").catch(() => []),
+    api("/api/reminders?due_today=true").catch(() => []),
+    api("/api/shopping").catch(() => []),
   ]);
 
   const today = todayStr();
@@ -1903,7 +1932,7 @@ async function loadDashboard() {
   const openDecisions = decisions.filter((d) => d.status === "open");
 
   const dueCount = dueBills.length + dueSubs.length + dueMaintenance.length;
-  const needCount = dueCount + openDecisions.length;
+  const needCount = dueCount + openDecisions.length + dueReminders.length;
   document.getElementById("digest-sub").textContent =
     needCount === 0
       ? "Nothing needs you today — enjoy the calm."
@@ -1959,14 +1988,37 @@ async function loadDashboard() {
     }
   }
 
+  if (dueReminders.length > 0) {
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = "Reminders";
+    feed.appendChild(label);
+
+    for (const reminder of dueReminders) {
+      const overdue = reminder.due_date < today;
+      const timeText = reminder.due_time ? ` · ${reminder.due_time.slice(0, 5)}` : "";
+      const forText = reminder.for_member && IDENTITY_NAMES[reminder.for_member]
+        ? ` · for ${IDENTITY_NAMES[reminder.for_member]}` : "";
+      feed.appendChild(buildFeedCard({
+        icon: "🔔", iconClass: "reminder",
+        title: reminder.text,
+        meta: `${overdue ? "overdue" : "today"}${timeText}${forText}`,
+        urgent: overdue,
+        checkbox: true,
+        onCheck: async () => {
+          await api(`/api/reminders/${reminder.id}/complete`, "POST");
+          showToast("Ticked off");
+        },
+      }));
+    }
+  }
+
+  let todaysEventCount = 0;
   const status = await api("/api/calendar/status").catch(() => null);
   if (status && status.configured && status.connected) {
     const events = await api("/api/calendar/events").catch(() => []);
-    const todaysEvents = events.filter((e) => {
-      const d = new Date(e.start_time);
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` === today;
-    });
+    const todaysEvents = events.filter((e) => householdDateOf(e.start_time) === today);
+    todaysEventCount = todaysEvents.length;
     if (todaysEvents.length > 0) {
       const label = document.createElement("div");
       label.className = "section-label";
@@ -2019,6 +2071,42 @@ async function loadDashboard() {
     meta: todaysMeal ? "Planned for today" : "Head to Browse → Meal planning to set one",
   }));
 
+  if (shoppingItems.length > 0) {
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = "Shopping list";
+    feed.appendChild(label);
+
+    const names = shoppingItems.map((i) => i.quantity ? `${i.name} (${i.quantity})` : i.name);
+    const card = buildFeedCard({
+      icon: "🛒", iconClass: "shopping",
+      title: `${shoppingItems.length} item${shoppingItems.length === 1 ? "" : "s"}`,
+      meta: names.slice(0, 4).join(", ") + (names.length > 4 ? "…" : ""),
+      expandHtml: '<div class="shopping-rows"></div>',
+    });
+    const rows = card.querySelector(".shopping-rows");
+    for (const item of shoppingItems) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "shopping-row";
+      row.innerHTML = `<span class="checkbox"></span><span>${escapeHtml(item.quantity ? `${item.name} (${item.quantity})` : item.name)}</span>`;
+      row.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        row.classList.add("done");
+        row.querySelector(".checkbox").classList.add("checked");
+        try {
+          await api(`/api/shopping/${item.id}/check`, "POST");
+        } catch (err) {
+          row.classList.remove("done");
+          row.querySelector(".checkbox").classList.remove("checked");
+          alert(err.message);
+        }
+      });
+      rows.appendChild(row);
+    }
+    feed.appendChild(card);
+  }
+
   const stubLabel = document.createElement("div");
   stubLabel.className = "section-label";
   stubLabel.textContent = "Coming soon";
@@ -2035,25 +2123,10 @@ async function loadDashboard() {
   );
   feed.appendChild(securityCard);
 
-  if (dueCount === 0 && openDecisions.length === 0 && feed.querySelectorAll(".feed-card").length === 2) {
+  if (needCount === 0 && todaysEventCount === 0) {
     const empty = document.createElement("p");
     empty.className = "feed-empty";
     empty.textContent = "Nothing due, nothing waiting on you.";
     feed.insertBefore(empty, stubLabel);
   }
 }
-
-const composerInput = document.getElementById("composer-input");
-const composerSend = document.getElementById("composer-send");
-
-function sendComposer() {
-  const value = composerInput.value.trim();
-  if (!value) return;
-  showToast("Quick-add isn't wired up yet — coming in a later phase.");
-  composerInput.value = "";
-}
-
-composerSend.addEventListener("click", sendComposer);
-composerInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") sendComposer();
-});

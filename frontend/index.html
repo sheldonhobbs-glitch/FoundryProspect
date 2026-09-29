@@ -112,10 +112,19 @@
       </main>
 
       <div class="composer" id="composer-bar">
-        <div class="composer-inner">
-          <input type="text" id="composer-input" placeholder="Add a reminder, item, or note…" />
-          <button type="button" id="composer-send" class="send-btn">↑</button>
+        <!-- Ember's replies: a transient panel above the composer, not a chat app. -->
+        <div class="ember-panel" id="ember-panel" hidden>
+          <div class="ember-panel-head">
+            <span class="ember-panel-title">Ember</span>
+            <button type="button" class="ember-panel-close" id="ember-panel-close" aria-label="Close">×</button>
+          </div>
+          <div class="ember-thread" id="ember-thread" aria-live="polite"></div>
         </div>
+        <form class="composer-inner" id="composer-form" autocomplete="off">
+          <input type="text" id="composer-input" maxlength="2000"
+                 placeholder="Tell Ember what happened, or ask anything…" aria-label="Message Ember" />
+          <button type="submit" id="composer-send" class="send-btn" aria-label="Send">↑</button>
+        </form>
       </div>
 
       <div class="toast" id="toast"></div>
@@ -124,5 +133,6 @@
 
   <script src="/static/js/app.js"></script>
   <script src="/static/js/household.js"></script>
+  <script src="/static/js/ember.js"></script>
 </body>
 </html>
