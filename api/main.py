@@ -13,6 +13,7 @@ from api.routes import auth as auth_routes
 from api.routes import bills as bills_routes
 from api.routes import calendar as calendar_routes
 from api.routes import decisions as decisions_routes
+from api.routes import ember as ember_routes
 from api.routes import financial as financial_routes
 from api.routes import health as health_routes
 from api.routes import maintenance as maintenance_routes
@@ -50,6 +51,7 @@ app.include_router(calendar_routes.router, prefix="/api")
 app.include_router(decisions_routes.router, prefix="/api")
 app.include_router(financial_routes.router, prefix="/api")
 app.include_router(meals_routes.router, prefix="/api")
+app.include_router(ember_routes.router, prefix="/api")
 
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 

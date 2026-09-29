@@ -30,3 +30,10 @@ How to reply
 def context_line(now: datetime, member: str | None) -> str:
     when = now.strftime("%A %-d %B %Y, %-I:%M %p").replace("AM", "am").replace("PM", "pm")
     return f"[Context: {when} ({now.tzinfo}). Speaking: {member_name(member)}.]"
+
+
+def strip_context(text: str) -> str:
+    """The user's own words, without the context line prepended to them."""
+    if text.startswith("[Context:") and "\n\n" in text:
+        return text.split("\n\n", 1)[1]
+    return text

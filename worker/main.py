@@ -22,7 +22,9 @@ from api import google_calendar as gcal
 from api.config import get_settings
 from db.models import Bill, MaintenanceItem, PendingNotification, Subscription, Warranty
 from db.session import SessionLocal
+from domain import reminders
 from domain.clock import household_today
+from domain.household import member_name
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s worker %(levelname)s %(message)s")
 logger = logging.getLogger("ember.worker")
@@ -44,7 +46,8 @@ def _queue_if_new(db: Session, resource_type: str, resource_id: int, message: st
     logger.info("queued notification: %s", message)
 
 
-def run_due_checks() -> None:
+def run_due_checks() -> bool:
+    """Returns False if the scan failed, so the caller retries next cycle."""
     settings = get_settings()
     horizon = household_today() + timedelta(days=settings.reminder_days_ahead)
     db = SessionLocal()
@@ -91,11 +94,18 @@ def run_due_checks() -> None:
                 f"Warranty expiring: {warranty.item} on {warranty.expiry_date.isoformat()}.",
             )
 
+        # Reminders surface on their due day, not days ahead like bills.
+        for reminder in reminders.due_on_or_before(db, household_today()):
+            who = f" ({member_name(reminder.for_member)})" if reminder.for_member else ""
+            _queue_if_new(db, "reminder", reminder.id, f"Reminder{who}: {reminder.text}")
+
         db.commit()
         logger.info("due-date scan complete (horizon=%s)", horizon.isoformat())
+        return True
     except Exception:
         db.rollback()
-        logger.exception("worker due-date scan failed")
+        logger.exception("worker due-date scan failed; will retry next cycle")
+        return False
     finally:
         db.close()
 
@@ -125,8 +135,9 @@ def main() -> None:
         sync_calendar()
 
         today = household_today()
-        if today != last_due_check:
-            run_due_checks()
+        # A failed scan (e.g. migrations still running during a deploy) is
+        # retried next cycle rather than skipped until tomorrow.
+        if today != last_due_check and run_due_checks():
             last_due_check = today
 
         time.sleep(CALENDAR_SYNC_INTERVAL_SECONDS)

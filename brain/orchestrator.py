@@ -47,6 +47,10 @@ class EmberUnavailable(Exception):
     """The Brain can't handle requests right now; str(exc) is user-facing."""
 
 
+class EmberLimitReached(EmberUnavailable):
+    pass
+
+
 @dataclass
 class ActionTaken:
     tool: str
@@ -275,7 +279,7 @@ class Orchestrator:
             .where(EmberTrace.kind == "message", EmberTrace.created_at >= day_start)
         )
         if used >= self.daily_limit:
-            raise EmberUnavailable("Ember has hit today's request limit. It resets at midnight.")
+            raise EmberLimitReached("Ember has hit today's request limit. It resets at midnight.")
 
     @staticmethod
     def _default_text(actions: list[ActionTaken], pending: list[PendingView]) -> str:

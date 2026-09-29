@@ -49,5 +49,8 @@ class FakeProvider:
             for r in results
         ]}
 
+    def message_text(self, message: dict) -> str:
+        return "".join(b.get("text", "") for b in message["content"] if b.get("type") == "text").strip()
+
 
 __all__ = ["FakeProvider", "ProviderError", "text_turn", "tool_turn"]

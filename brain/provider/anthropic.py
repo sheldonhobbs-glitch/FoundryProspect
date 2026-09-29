@@ -84,3 +84,9 @@ class AnthropicProvider:
                 for r in results
             ],
         }
+
+    def message_text(self, message: dict) -> str:
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        return "".join(b.get("text", "") for b in content or [] if b.get("type") == "text").strip()
