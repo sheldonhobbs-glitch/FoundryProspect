@@ -27,14 +27,12 @@ logger = logging.getLogger("ember.startup")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Run migrations in-process at startup rather than as a separate shell
-    # step before uvicorn — keeps it in one process/log stream and one
-    # thing that can fail, instead of a fragile two-command chain.
-    try:
-        logger.info("running database migrations...")
-        command.upgrade(AlembicConfig("alembic.ini"), "head")
-        logger.info("migrations complete")
-    except Exception:
-        logger.exception("database migrations failed on startup")
+    # step before uvicorn. A failure must stop startup: serving requests
+    # against a half-migrated schema is worse than a failed deploy (Render
+    # keeps the previous deploy live when a new one fails to boot).
+    logger.info("running database migrations...")
+    command.upgrade(AlembicConfig("alembic.ini"), "head")
+    logger.info("migrations complete")
     yield
 
 

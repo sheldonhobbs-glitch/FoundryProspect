@@ -1,6 +1,3 @@
-from datetime import date
-
-from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +6,7 @@ from api.deps import require_auth
 from api.schemas import MaintenanceItemCreate, MaintenanceItemRead, MaintenanceItemUpdate
 from db.models import MaintenanceItem
 from db.session import get_db
+from domain import household_admin
 
 router = APIRouter(
     prefix="/maintenance", tags=["maintenance"], dependencies=[Depends(require_auth)]
@@ -64,11 +62,7 @@ def delete_maintenance(item_id: int, db: Session = Depends(get_db)) -> None:
 def mark_maintenance_done(item_id: int, db: Session = Depends(get_db)) -> MaintenanceItem:
     """Sets last_done to today. If a recurrence interval is set, also rolls
     next_due forward by it; otherwise next_due is left for manual editing."""
-    item = _get_or_404(db, item_id)
-    item.last_done = date.today()
-    if item.recurrence_value and item.recurrence_unit:
-        step = relativedelta(**{item.recurrence_unit.value: item.recurrence_value})
-        item.next_due = item.last_done + step
+    item = household_admin.mark_maintenance_done(db, _get_or_404(db, item_id))
     db.commit()
     db.refresh(item)
     return item

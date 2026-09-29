@@ -22,6 +22,10 @@ class Settings(BaseSettings):
 
     reminder_days_ahead: int = 3
 
+    # "Today" for the household. The server runs in UTC; without this, dates
+    # stamped between midnight and ~10am in Cairns land on the previous day.
+    household_timezone: str = "Australia/Brisbane"
+
     google_client_id: str = ""
     google_client_secret: str = ""
     google_calendar_id: str = "primary"

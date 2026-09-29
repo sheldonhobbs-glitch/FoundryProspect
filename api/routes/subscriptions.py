@@ -1,24 +1,16 @@
-from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import SubscriptionCreate, SubscriptionRead, SubscriptionUpdate
-from db.models import BillingCycle, Subscription
+from db.models import Subscription
 from db.session import get_db
+from domain import household_admin
 
 router = APIRouter(
     prefix="/subscriptions", tags=["subscriptions"], dependencies=[Depends(require_auth)]
 )
-
-_CYCLE_STEP = {
-    BillingCycle.weekly: relativedelta(weeks=1),
-    BillingCycle.monthly: relativedelta(months=1),
-    BillingCycle.quarterly: relativedelta(months=3),
-    BillingCycle.yearly: relativedelta(years=1),
-}
-
 
 def _get_or_404(db: Session, subscription_id: int) -> Subscription:
     subscription = db.get(Subscription, subscription_id)
@@ -68,8 +60,7 @@ def delete_subscription(subscription_id: int, db: Session = Depends(get_db)) -> 
 @router.post("/{subscription_id}/renew", response_model=SubscriptionRead)
 def renew_subscription(subscription_id: int, db: Session = Depends(get_db)) -> Subscription:
     """Rolls renewal_date forward by one billing cycle."""
-    subscription = _get_or_404(db, subscription_id)
-    subscription.renewal_date = subscription.renewal_date + _CYCLE_STEP[subscription.billing_cycle]
+    subscription = household_admin.renew_subscription(db, _get_or_404(db, subscription_id))
     db.commit()
     db.refresh(subscription)
     return subscription

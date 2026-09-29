@@ -1,26 +1,16 @@
-from datetime import date
-
-from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import BillCreate, BillRead, BillUpdate
-from db.models import Bill, Recurrence
+from db.models import Bill
 from db.session import get_db
+from domain import household_admin
 
 router = APIRouter(
     prefix="/bills", tags=["bills"], dependencies=[Depends(require_auth)]
 )
-
-_RECURRENCE_STEP = {
-    Recurrence.weekly: relativedelta(weeks=1),
-    Recurrence.monthly: relativedelta(months=1),
-    Recurrence.quarterly: relativedelta(months=3),
-    Recurrence.yearly: relativedelta(years=1),
-}
-
 
 def _get_or_404(db: Session, bill_id: int) -> Bill:
     bill = db.get(Bill, bill_id)
@@ -69,13 +59,7 @@ def delete_bill(bill_id: int, db: Session = Depends(get_db)) -> None:
 def mark_bill_paid(bill_id: int, db: Session = Depends(get_db)) -> Bill:
     """Marks paid. For recurring bills, also rolls due_date to the next
     occurrence and resets paid to False for that new cycle."""
-    bill = _get_or_404(db, bill_id)
-    step = _RECURRENCE_STEP.get(bill.recurrence)
-    if step is not None:
-        bill.due_date = bill.due_date + step
-        bill.paid = False
-    else:
-        bill.paid = True
+    bill = household_admin.mark_bill_paid(db, _get_or_404(db, bill_id))
     db.commit()
     db.refresh(bill)
     return bill

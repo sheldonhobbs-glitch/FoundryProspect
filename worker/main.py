@@ -22,6 +22,7 @@ from api import google_calendar as gcal
 from api.config import get_settings
 from db.models import Bill, MaintenanceItem, PendingNotification, Subscription, Warranty
 from db.session import SessionLocal
+from domain.clock import household_today
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s worker %(levelname)s %(message)s")
 logger = logging.getLogger("ember.worker")
@@ -45,7 +46,7 @@ def _queue_if_new(db: Session, resource_type: str, resource_id: int, message: st
 
 def run_due_checks() -> None:
     settings = get_settings()
-    horizon = date.today() + timedelta(days=settings.reminder_days_ahead)
+    horizon = household_today() + timedelta(days=settings.reminder_days_ahead)
     db = SessionLocal()
     try:
         for bill in db.scalars(select(Bill).where(Bill.paid.is_(False), Bill.due_date <= horizon)):
@@ -123,7 +124,7 @@ def main() -> None:
     while True:
         sync_calendar()
 
-        today = date.today()
+        today = household_today()
         if today != last_due_check:
             run_due_checks()
             last_due_check = today

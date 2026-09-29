@@ -1,5 +1,3 @@
-from datetime import date
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,6 +6,7 @@ from api.deps import IDENTITIES, get_identity, require_auth
 from api.schemas import DecisionCreate, DecisionRead, DecisionUpdate, DecisionVoteCreate
 from db.models import Decision, DecisionOption, DecisionStatus, DecisionVote
 from db.session import get_db
+from domain.clock import household_today
 
 router = APIRouter(prefix="/decisions", tags=["decisions"], dependencies=[Depends(require_auth)])
 
@@ -81,7 +80,7 @@ def vote_decision(
         winning_option = db.get(DecisionOption, next(iter(votes_by_voter.values())))
         decision.status = DecisionStatus.decided
         decision.decision = winning_option.text
-        decision.decided_at = date.today()
+        decision.decided_at = household_today()
     else:
         decision.status = DecisionStatus.open
         decision.decision = None

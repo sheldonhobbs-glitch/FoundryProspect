@@ -3,7 +3,6 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from googleapiclient.errors import HttpError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,8 @@ from api.deps import require_auth
 from api.schemas import CalendarEventCreate, CalendarEventRead, CalendarEventUpdate, CalendarStatus
 from db.models import CalendarEvent, GoogleCalendarCredential
 from db.session import get_db
+from domain import calendar
+from domain.errors import IntegrationError
 
 logger = logging.getLogger("ember.api.calendar")
 
@@ -110,23 +111,14 @@ def list_events(db: Session = Depends(get_db)) -> list[CalendarEvent]:
 
 @router.post("/events", response_model=CalendarEventRead, status_code=201)
 def create_event(payload: CalendarEventCreate, db: Session = Depends(get_db)) -> CalendarEvent:
-    service = _service_or_400(db)
-    body = gcal.event_to_google_body(
-        payload.title, payload.description, payload.location,
-        payload.start_time, payload.end_time, payload.all_day,
-    )
     try:
-        g_event = service.events().insert(calendarId=settings.google_calendar_id, body=body).execute()
-    except Exception as exc:
-        logger.exception("Google Calendar event create failed")
-        raise HTTPException(status_code=502, detail="Couldn't create the event in Google Calendar.") from exc
-
-    event = CalendarEvent(
-        google_event_id=g_event["id"], title=payload.title, description=payload.description,
-        location=payload.location, start_time=payload.start_time, end_time=payload.end_time,
-        all_day=payload.all_day, owner=payload.owner,
-    )
-    db.add(event)
+        event = calendar.create_event(
+            db, title=payload.title, start_time=payload.start_time, end_time=payload.end_time,
+            all_day=payload.all_day, location=payload.location, description=payload.description,
+            owner=payload.owner,
+        )
+    except IntegrationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     db.commit()
     db.refresh(event)
     return event
@@ -135,23 +127,10 @@ def create_event(payload: CalendarEventCreate, db: Session = Depends(get_db)) ->
 @router.patch("/events/{event_id}", response_model=CalendarEventRead)
 def update_event(event_id: int, payload: CalendarEventUpdate, db: Session = Depends(get_db)) -> CalendarEvent:
     event = _get_or_404(db, event_id)
-    service = _service_or_400(db)
-
-    updates = payload.model_dump(exclude_unset=True)
-    for field, value in updates.items():
-        setattr(event, field, value)
-
-    body = gcal.event_to_google_body(
-        event.title, event.description, event.location, event.start_time, event.end_time, event.all_day
-    )
     try:
-        service.events().update(
-            calendarId=settings.google_calendar_id, eventId=event.google_event_id, body=body
-        ).execute()
-    except Exception as exc:
-        logger.exception("Google Calendar event update failed")
-        raise HTTPException(status_code=502, detail="Couldn't update the event in Google Calendar.") from exc
-
+        calendar.update_event(db, event, **payload.model_dump(exclude_unset=True))
+    except IntegrationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     db.commit()
     db.refresh(event)
     return event
@@ -160,26 +139,8 @@ def update_event(event_id: int, payload: CalendarEventUpdate, db: Session = Depe
 @router.delete("/events/{event_id}", status_code=204)
 def delete_event(event_id: int, db: Session = Depends(get_db)) -> None:
     event = _get_or_404(db, event_id)
-    service = _service_or_400(db)
     try:
-        service.events().delete(calendarId=settings.google_calendar_id, eventId=event.google_event_id).execute()
-    except HttpError as exc:
-        # 404 means it's already gone on Google's side — fine, still clean up locally.
-        if exc.resp.status != 404:
-            logger.exception("Google Calendar event delete failed")
-            raise HTTPException(status_code=502, detail="Couldn't delete the event in Google Calendar.") from exc
-    except Exception as exc:
-        logger.exception("Google Calendar event delete failed")
-        raise HTTPException(status_code=502, detail="Couldn't delete the event in Google Calendar.") from exc
-    db.delete(event)
-    db.commit()
-
-
-def _service_or_400(db: Session):
-    try:
-        service = gcal.get_service(db)
-    except gcal.CalendarError as exc:
+        calendar.delete_event(db, event)
+    except IntegrationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    if service is None:
-        raise HTTPException(status_code=400, detail="Google Calendar isn't connected yet.")
-    return service
+    db.commit()

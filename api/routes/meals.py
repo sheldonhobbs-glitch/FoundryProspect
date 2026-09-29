@@ -1,5 +1,3 @@
-from datetime import date, timedelta
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,6 +13,7 @@ from api.schemas import (
 )
 from db.models import MealPlanEntry, PantryItem
 from db.session import get_db
+from domain import meals
 
 router = APIRouter(prefix="/meals", tags=["meals"], dependencies=[Depends(require_auth)])
 
@@ -70,29 +69,13 @@ def delete_pantry_item(item_id: int, db: Session = Depends(get_db)) -> None:
 
 @router.get("/plan", response_model=list[MealPlanEntryRead])
 def list_plan(db: Session = Depends(get_db)) -> list[MealPlanEntry]:
-    today = date.today()
-    window_start = today - timedelta(days=1)
-    window_end = today + timedelta(days=6)
-    return list(
-        db.scalars(
-            select(MealPlanEntry)
-            .where(MealPlanEntry.plan_date >= window_start, MealPlanEntry.plan_date <= window_end)
-            .order_by(MealPlanEntry.plan_date)
-        )
-    )
+    return meals.list_plan(db)
 
 
 @router.post("/plan", response_model=MealPlanEntryRead, status_code=201)
 def set_plan_entry(payload: MealPlanEntryCreate, db: Session = Depends(get_db)) -> MealPlanEntry:
     """Upsert: setting a meal for a date that already has one replaces it."""
-    existing = db.query(MealPlanEntry).filter_by(plan_date=payload.plan_date).first()
-    if existing:
-        existing.meal_text = payload.meal_text
-        db.commit()
-        db.refresh(existing)
-        return existing
-    entry = MealPlanEntry(**payload.model_dump())
-    db.add(entry)
+    entry = meals.set_meal(db, payload.plan_date, payload.meal_text)
     db.commit()
     db.refresh(entry)
     return entry

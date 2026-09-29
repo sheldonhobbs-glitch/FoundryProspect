@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from api.schemas import (
 )
 from db.models import CashflowEntry, CashflowKind, Receipt, Warranty
 from db.session import get_db
+from domain.clock import household_today
 
 router = APIRouter(prefix="/financial", tags=["financial"], dependencies=[Depends(require_auth)])
 
@@ -85,7 +86,7 @@ def delete_cashflow_entry(entry_id: int, db: Session = Depends(get_db)) -> None:
 def financial_summary(
     view: str = Query("monthly", pattern="^(monthly|alltime)$"), db: Session = Depends(get_db)
 ) -> dict:
-    today = date.today()
+    today = household_today()
     receipts = list(db.scalars(select(Receipt)))
     entries = list(db.scalars(select(CashflowEntry)))
     warranties = list(db.scalars(select(Warranty)))
