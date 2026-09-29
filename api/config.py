@@ -33,7 +33,16 @@ class Settings(BaseSettings):
     # Google Cloud Console, e.g. https://<railway-domain>/api/calendar/oauth/callback
     google_redirect_uri: str = "http://localhost:8000/api/calendar/oauth/callback"
 
+    # --- Ember Brain ---
     anthropic_api_key: str = ""
+    ember_model: str = "claude-opus-5-5"
+    # low | medium | high — household commands rarely need deep reasoning.
+    ember_effort: str = "low"
+    # Guards the API bill if the login link ever leaks.
+    ember_daily_request_limit: int = 200
+    # Off until a dedicated household calendar is connected; while off the
+    # Brain can read the calendar but not create/change/delete events.
+    ember_calendar_writes_enabled: bool = False
 
     vapid_public_key: str = ""
     vapid_private_key: str = ""

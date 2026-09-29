@@ -1,12 +1,15 @@
 from db.models.bill import Bill, Recurrence
 from db.models.calendar import CalendarEvent, GoogleCalendarCredential
 from db.models.cashflow_entry import CashflowEntry, CashflowKind
+from db.models.ember import EmberConversation, EmberMessage, EmberPendingAction, EmberTrace
 from db.models.decision import Decision, DecisionOption, DecisionStatus, DecisionVote
 from db.models.maintenance_item import MaintenanceItem, RecurrenceUnit
 from db.models.meal_plan_entry import MealPlanEntry
 from db.models.notification import PendingNotification
 from db.models.pantry_item import PantryItem
 from db.models.receipt import Receipt
+from db.models.reminder import Reminder
+from db.models.shopping import ShoppingListItem
 from db.models.subscription import BillingCycle, Subscription
 from db.models.warranty import Warranty
 
@@ -30,4 +33,10 @@ __all__ = [
     "CashflowKind",
     "PantryItem",
     "MealPlanEntry",
+    "EmberConversation",
+    "EmberMessage",
+    "EmberPendingAction",
+    "EmberTrace",
+    "ShoppingListItem",
+    "Reminder",
 ]
